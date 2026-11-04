@@ -1,5 +1,7 @@
 package com.ourlist.app.ui.screens.more
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,25 +9,21 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,16 +32,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.ourlist.app.data.model.BucketCollection
+import com.ourlist.app.data.model.BucketItem
 import com.ourlist.app.data.model.ViewMode
 import com.ourlist.app.ui.components.BucketItemCard
 import com.ourlist.app.ui.components.BucketItemRow
+import com.ourlist.app.ui.components.EmptyStateCard
 import com.ourlist.app.ui.components.FilterSortBar
+import com.ourlist.app.ui.components.HomeHeader
+import com.ourlist.app.ui.components.InlineAddButton
+import com.ourlist.app.ui.components.SegmentedControl
+import com.ourlist.app.ui.rememberHaptics
 import com.ourlist.app.ui.screens.memories.MemoryItemCard
 import com.ourlist.app.ui.screens.shared.BucketListViewModel
+import com.ourlist.app.ui.theme.Due
+import com.ourlist.app.ui.theme.Ink
+import com.ourlist.app.ui.theme.OurListDimens
+import com.ourlist.app.ui.theme.Primary
+import com.ourlist.app.ui.theme.Review
+import com.ourlist.app.ui.theme.SurfaceRaised
+import com.ourlist.app.ui.theme.TextPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,35 +69,55 @@ fun PersonalScreen(
     val sortOption by viewModel.sortOption.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedWishType by viewModel.selectedWishType.collectAsState()
+    val haptics = rememberHaptics()
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = { Text("개인 버킷리스트", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "뒤로가기")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToAdd,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Ink),
+        contentPadding = PaddingValues(
+            start = OurListDimens.ScreenPadding,
+            top = 16.dp,
+            end = OurListDimens.ScreenPadding,
+            bottom = 20.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // 1. Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = "추가")
+                Box(
+                    modifier = Modifier
+                        .size(OurListDimens.MinTouchTarget)
+                        .clip(CircleShape)
+                        .background(SurfaceRaised)
+                        .clickable {
+                            haptics.tick()
+                            onNavigateBack()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "뒤로가기",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                HomeHeader(
+                    title = "개인 버킷리스트",
+                    subtitle = "나만 볼 수 있는 로컬 보관함",
+                    accentColor = Primary,
+                )
             }
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
+
+        // 2. Filter & Sort Bar
+        item {
             FilterSortBar(
                 searchQuery = searchQuery,
                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
@@ -96,43 +126,50 @@ fun PersonalScreen(
                 sortOption = sortOption,
                 onSortOptionChange = { viewModel.setSortOption(it) },
                 viewMode = viewMode,
-                onToggleViewMode = { viewModel.toggleViewMode() }
+                onToggleViewMode = { viewModel.toggleViewMode() },
             )
+        }
 
-            if (items.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "등록된 개인 버킷리스트가 없습니다.\n나만의 목표를 적어보세요!",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+        // 3. Items List
+        if (items.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = "등록된 개인 버킷리스트가 없어요",
+                    description = "공유되지 않고 오직 이 기기에만 저장되는 나만의 꿈을 적어보세요.",
+                    action = {
+                        InlineAddButton(
+                            text = "개인 버킷리스트 추가하기",
+                            onClick = onNavigateToAdd,
+                        )
+                    },
+                )
+            }
+        } else {
+            items(items, key = { it.id }) { item ->
+                if (viewMode == ViewMode.CARD) {
+                    BucketItemCard(
+                        item = item,
+                        onClick = { onNavigateToDetail(item.id) },
+                        onCompleteToggle = { viewModel.completeItem(item.id) },
+                        onChecklistToggle = { checkId, checked ->
+                            viewModel.toggleChecklistItem(item.id, checkId, checked)
+                        },
+                    )
+                } else {
+                    BucketItemRow(
+                        item = item,
+                        onClick = { onNavigateToDetail(item.id) },
+                        onCompleteToggle = { viewModel.completeItem(item.id) },
                     )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(items, key = { it.id }) { item ->
-                        if (viewMode == ViewMode.CARD) {
-                            BucketItemCard(
-                                item = item,
-                                onClick = { onNavigateToDetail(item.id) },
-                                onCompleteToggle = { viewModel.completeItem(item.id) },
-                                onChecklistToggle = { checkId, checked ->
-                                    viewModel.toggleChecklistItem(item.id, checkId, checked)
-                                }
-                            )
-                        } else {
-                            BucketItemRow(
-                                item = item,
-                                onClick = { onNavigateToDetail(item.id) },
-                                onCompleteToggle = { viewModel.completeItem(item.id) }
-                            )
-                        }
-                    }
-                }
+            }
+
+            item {
+                Spacer(Modifier.height(4.dp))
+                InlineAddButton(
+                    text = "개인 버킷리스트 추가",
+                    onClick = onNavigateToAdd,
+                )
             }
         }
     }
@@ -142,7 +179,7 @@ fun PersonalScreen(
 @Composable
 fun SecretPersonalScreen(
     viewModel: BucketListViewModel,
-    secretMemories: List<com.ourlist.app.data.model.BucketItem>,
+    secretMemories: List<BucketItem>,
     onNavigateToDetail: (String) -> Unit,
     onNavigateToAdd: () -> Unit,
     onNavigateBack: () -> Unit,
@@ -156,62 +193,68 @@ fun SecretPersonalScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedWishType by viewModel.selectedWishType.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(0) } // 0: 미완료, 1: 달성한 비밀 추억
+    var selectedTab by remember { mutableStateOf(0) } // 0: 진행 중, 1: 달성한 비밀 추억
+    val haptics = rememberHaptics()
+    val tabOptions = listOf("진행 중 (${items.size})", "비밀 추억 (${secretMemories.size})")
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(8.dp))
-                        Text("개인 비밀 버킷리스트", fontWeight = FontWeight.Bold)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "뒤로가기")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        },
-        floatingActionButton = {
-            if (selectedTab == 0) {
-                FloatingActionButton(
-                    onClick = onNavigateToAdd,
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Ink),
+        contentPadding = PaddingValues(
+            start = OurListDimens.ScreenPadding,
+            top = 16.dp,
+            end = OurListDimens.ScreenPadding,
+            bottom = 20.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // 1. Header
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(OurListDimens.MinTouchTarget)
+                        .clip(CircleShape)
+                        .background(SurfaceRaised)
+                        .clickable {
+                            haptics.tick()
+                            onNavigateBack()
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(imageVector = Icons.Filled.Add, contentDescription = "추가")
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        contentDescription = "뒤로가기",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
+                Spacer(Modifier.width(12.dp))
+                HomeHeader(
+                    title = "개인 비밀 보관함",
+                    subtitle = "공유 Drive에 올라가지 않는 비밀 목록",
+                    accentColor = Due,
+                )
             }
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                edgePadding = 16.dp,
-                containerColor = MaterialTheme.colorScheme.background
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("진행 중 (${items.size})") }
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("비밀 추억 (${secretMemories.size})") }
-                )
-            }
 
-            if (selectedTab == 0) {
+        // 2. Tab Segmented Control
+        item {
+            SegmentedControl(
+                options = listOf(0, 1),
+                selected = selectedTab,
+                label = { tabOptions[it] },
+                onSelect = { selectedTab = it },
+            )
+        }
+
+        // 3. Tab Content
+        if (selectedTab == 0) {
+            item {
                 FilterSortBar(
                     searchQuery = searchQuery,
                     onSearchQueryChange = { viewModel.setSearchQuery(it) },
@@ -220,70 +263,71 @@ fun SecretPersonalScreen(
                     sortOption = sortOption,
                     onSortOptionChange = { viewModel.setSortOption(it) },
                     viewMode = viewMode,
-                    onToggleViewMode = { viewModel.toggleViewMode() }
+                    onToggleViewMode = { viewModel.toggleViewMode() },
+                    accentColor = Due,
                 )
+            }
 
-                if (items.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "비밀 버킷리스트가 없습니다.\n공동 Drive에 공유되지 않는 나만의 비밀을 적어보세요.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(items, key = { it.id }) { item ->
-                            if (viewMode == ViewMode.CARD) {
-                                BucketItemCard(
-                                    item = item,
-                                    onClick = { onNavigateToDetail(item.id) },
-                                    onCompleteToggle = { viewModel.completeItem(item.id) },
-                                    onChecklistToggle = { checkId, checked ->
-                                        viewModel.toggleChecklistItem(item.id, checkId, checked)
-                                    }
-                                )
-                            } else {
-                                BucketItemRow(
-                                    item = item,
-                                    onClick = { onNavigateToDetail(item.id) },
-                                    onCompleteToggle = { viewModel.completeItem(item.id) }
-                                )
-                            }
-                        }
-                    }
+            if (items.isEmpty()) {
+                item {
+                    EmptyStateCard(
+                        title = "비밀 버킷리스트가 없어요",
+                        description = "Google Drive에 절대 동기화되지 않는 나만의 소중한 비밀 목표를 적어보세요.",
+                        action = {
+                            InlineAddButton(
+                                text = "비밀 버킷리스트 추가하기",
+                                onClick = onNavigateToAdd,
+                                accentColor = Due,
+                            )
+                        },
+                    )
                 }
             } else {
-                // Secret Memories View
-                if (secretMemories.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "달성한 비밀 추억이 없습니다.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                items(items, key = { it.id }) { item ->
+                    if (viewMode == ViewMode.CARD) {
+                        BucketItemCard(
+                            item = item,
+                            onClick = { onNavigateToDetail(item.id) },
+                            onCompleteToggle = { viewModel.completeItem(item.id) },
+                            onChecklistToggle = { checkId, checked ->
+                                viewModel.toggleChecklistItem(item.id, checkId, checked)
+                            },
+                        )
+                    } else {
+                        BucketItemRow(
+                            item = item,
+                            onClick = { onNavigateToDetail(item.id) },
+                            onCompleteToggle = { viewModel.completeItem(item.id) },
                         )
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(secretMemories, key = { it.id }) { item ->
-                            MemoryItemCard(
-                                item = item,
-                                onClick = { onNavigateToDetail(item.id) },
-                                onDoAgain = { onDoAgain(item.id) },
-                                onRevert = { onRevert(item.id) }
-                            )
-                        }
-                    }
+                }
+
+                item {
+                    Spacer(Modifier.height(4.dp))
+                    InlineAddButton(
+                        text = "비밀 버킷리스트 추가",
+                        onClick = onNavigateToAdd,
+                        accentColor = Due,
+                    )
+                }
+            }
+        } else {
+            // Secret Memories
+            if (secretMemories.isEmpty()) {
+                item {
+                    EmptyStateCard(
+                        title = "달성한 비밀 추억이 없어요",
+                        description = "비밀 버킷리스트를 완료하면 이곳에 안전하게 보관됩니다.",
+                    )
+                }
+            } else {
+                items(secretMemories, key = { it.id }) { item ->
+                    MemoryItemCard(
+                        item = item,
+                        onClick = { onNavigateToDetail(item.id) },
+                        onDoAgain = { onDoAgain(item.id) },
+                        onRevert = { onRevert(item.id) },
+                    )
                 }
             }
         }

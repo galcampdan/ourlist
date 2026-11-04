@@ -1,39 +1,48 @@
 package com.ourlist.app.ui.screens.heart
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.ourlist.app.data.model.BucketCollection
 import com.ourlist.app.data.model.ViewMode
+import com.ourlist.app.data.sync.SyncState
 import com.ourlist.app.ui.components.BucketItemCard
 import com.ourlist.app.ui.components.BucketItemRow
+import com.ourlist.app.ui.components.CoupleOverviewCard
+import com.ourlist.app.ui.components.EmptyStateCard
 import com.ourlist.app.ui.components.FilterSortBar
+import com.ourlist.app.ui.components.HomeHeader
+import com.ourlist.app.ui.components.InlineAddButton
+import com.ourlist.app.ui.rememberHaptics
 import com.ourlist.app.ui.screens.shared.BucketListViewModel
+import com.ourlist.app.ui.theme.HeartGradientEnd
+import com.ourlist.app.ui.theme.HeartGradientStart
 import com.ourlist.app.ui.theme.HeartRed
+import com.ourlist.app.ui.theme.Ink
+import com.ourlist.app.ui.theme.OurListDimens
+import com.ourlist.app.ui.theme.SurfaceRaised
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,39 +57,75 @@ fun HeartScreen(
     val sortOption by viewModel.sortOption.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedWishType by viewModel.selectedWishType.collectAsState()
+    val syncState by viewModel.syncState.collectAsState()
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "❤️ 하트 공동 목록",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = HeartRed
-                    )
+    val haptics = rememberHaptics()
+    val completedCount = items.count { it.isDone }
+    val totalCount = items.size
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Ink),
+        contentPadding = PaddingValues(
+            start = OurListDimens.ScreenPadding,
+            top = 16.dp,
+            end = OurListDimens.ScreenPadding,
+            bottom = 20.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        // 1. Header
+        item {
+            HomeHeader(
+                title = "❤️ 하트 보관함",
+                subtitle = "둘만의 특별하고 설레는 기록",
+                accentColor = HeartRed,
+                actions = {
+                    Box(
+                        modifier = Modifier
+                            .size(OurListDimens.MinTouchTarget)
+                            .clip(CircleShape)
+                            .background(SurfaceRaised)
+                            .clickable {
+                                haptics.tick()
+                                viewModel.triggerSync()
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (syncState is SyncState.Syncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = HeartRed,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Sync,
+                                contentDescription = "동기화",
+                                tint = HeartRed,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToAdd,
-                containerColor = HeartRed,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = "하트 버킷리스트 추가")
-            }
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
+
+        // 2. Romantic Gradient Overview Card
+        item {
+            CoupleOverviewCard(
+                completedCount = completedCount,
+                totalCount = totalCount,
+                syncState = syncState,
+                gradientColors = listOf(HeartGradientStart, HeartGradientEnd),
+                title = "둘만의 설레는 순간들",
+                accentColor = HeartRed,
+            )
+        }
+
+        // 3. Filter & Sort Bar
+        item {
             FilterSortBar(
                 searchQuery = searchQuery,
                 onSearchQueryChange = { viewModel.setSearchQuery(it) },
@@ -89,60 +134,61 @@ fun HeartScreen(
                 sortOption = sortOption,
                 onSortOptionChange = { viewModel.setSortOption(it) },
                 viewMode = viewMode,
-                onToggleViewMode = { viewModel.toggleViewMode() }
+                onToggleViewMode = { viewModel.toggleViewMode() },
+                accentColor = HeartRed,
             )
+        }
 
-            if (items.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Filled.Favorite,
-                            contentDescription = null,
-                            tint = HeartRed.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(bottom = 12.dp)
+        // 4. Items List
+        if (items.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = if (searchQuery.isNotEmpty() || selectedWishType != null) {
+                        "조건에 맞는 하트 버킷리스트가 없어요"
+                    } else {
+                        "아직 등록된 하트 버킷리스트가 없어요"
+                    },
+                    description = if (searchQuery.isNotEmpty() || selectedWishType != null) {
+                        "다른 검색어나 필터를 선택해보세요."
+                    } else {
+                        "오직 둘만의 비밀스럽고 설레는 계획을 지금 적어보세요!"
+                    },
+                    action = {
+                        InlineAddButton(
+                            text = "하트 버킷리스트 추가하기",
+                            onClick = onNavigateToAdd,
+                            accentColor = HeartRed,
                         )
-                        Text(
-                            text = if (searchQuery.isNotEmpty() || selectedWishType != null) {
-                                "조건에 맞는 하트 버킷리스트가 없습니다."
-                            } else {
-                                "두 사람만의 특별한 버킷리스트 공간이에요.\n오직 둘만의 비밀스럽고 설레는 계획을 적어보세요!"
-                            },
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    },
+                )
+            }
+        } else {
+            items(items, key = { it.id }) { item ->
+                if (viewMode == ViewMode.CARD) {
+                    BucketItemCard(
+                        item = item,
+                        onClick = { onNavigateToDetail(item.id) },
+                        onCompleteToggle = { viewModel.completeItem(item.id) },
+                        onChecklistToggle = { checkId, checked ->
+                            viewModel.toggleChecklistItem(item.id, checkId, checked)
+                        },
+                    )
+                } else {
+                    BucketItemRow(
+                        item = item,
+                        onClick = { onNavigateToDetail(item.id) },
+                        onCompleteToggle = { viewModel.completeItem(item.id) },
+                    )
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(items, key = { it.id }) { item ->
-                        if (viewMode == ViewMode.CARD) {
-                            BucketItemCard(
-                                item = item,
-                                onClick = { onNavigateToDetail(item.id) },
-                                onCompleteToggle = { viewModel.completeItem(item.id) },
-                                onChecklistToggle = { checkId, checked ->
-                                    viewModel.toggleChecklistItem(item.id, checkId, checked)
-                                }
-                            )
-                        } else {
-                            BucketItemRow(
-                                item = item,
-                                onClick = { onNavigateToDetail(item.id) },
-                                onCompleteToggle = { viewModel.completeItem(item.id) }
-                            )
-                        }
-                    }
-                }
+            }
+
+            item {
+                Spacer(Modifier.height(4.dp))
+                InlineAddButton(
+                    text = "하트 버킷리스트 추가",
+                    onClick = onNavigateToAdd,
+                    accentColor = HeartRed,
+                )
             }
         }
     }

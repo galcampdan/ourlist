@@ -1,5 +1,7 @@
 package com.ourlist.app.ui.screens.notifications
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,34 +24,42 @@ import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ourlist.app.data.model.InAppNotification
+import com.ourlist.app.ui.components.EmptyStateCard
+import com.ourlist.app.ui.components.HomeHeader
+import com.ourlist.app.ui.components.OurListCard
+import com.ourlist.app.ui.components.StatusPill
+import com.ourlist.app.ui.rememberHaptics
+import com.ourlist.app.ui.theme.Danger
+import com.ourlist.app.ui.theme.Divider
+import com.ourlist.app.ui.theme.Due
+import com.ourlist.app.ui.theme.Income
+import com.ourlist.app.ui.theme.Ink
+import com.ourlist.app.ui.theme.OurListDimens
+import com.ourlist.app.ui.theme.Primary
+import com.ourlist.app.ui.theme.Review
+import com.ourlist.app.ui.theme.Surface
+import com.ourlist.app.ui.theme.SurfaceRaised
+import com.ourlist.app.ui.theme.TextPrimary
+import com.ourlist.app.ui.theme.TextSecondary
+import com.ourlist.app.ui.theme.TextTertiary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
@@ -58,79 +68,75 @@ fun NotificationsScreen(
 ) {
     val notifications by viewModel.notifications.collectAsState()
     val unreadCount by viewModel.unreadCount.collectAsState()
+    val haptics = rememberHaptics()
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "상대방 소식",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                },
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Ink),
+        contentPadding = PaddingValues(
+            start = OurListDimens.ScreenPadding,
+            top = 16.dp,
+            end = OurListDimens.ScreenPadding,
+            bottom = 20.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // 1. Header
+        item {
+            HomeHeader(
+                title = "상대방 소식",
+                subtitle = "실시간 공동 작업 알림",
+                accentColor = Primary,
                 actions = {
                     if (unreadCount > 0) {
-                        TextButton(onClick = { viewModel.markAllAsRead() }) {
+                        TextButton(
+                            onClick = {
+                                haptics.confirm()
+                                viewModel.markAllAsRead()
+                            },
+                        ) {
                             Icon(
                                 imageVector = Icons.Filled.DoneAll,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp),
+                                tint = Primary,
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("모두 읽음")
+                            Text(
+                                text = "모두 읽음",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Primary,
+                                fontWeight = FontWeight.Bold,
+                            )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
             )
         }
-    ) { paddingValues ->
+
+        // 2. Notifications List
         if (notifications.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Filled.Notifications,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                        modifier = Modifier.size(56.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "아직 상대방의 새로운 활동이 없어요.\n상대방이 버킷리스트를 추가하거나 수정하면\n이곳에 알림이 표시됩니다.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            item {
+                EmptyStateCard(
+                    title = "아직 상대방의 새로운 소식이 없어요",
+                    description = "상대방이 버킷리스트를 추가하거나 완료, 수정하면 여기에 실시간으로 기록됩니다.",
+                )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(notifications, key = { it.id }) { item ->
-                    NotificationItemCard(
-                        item = item,
-                        onClick = {
-                            viewModel.markAsRead(item.id)
-                            onNavigateToDetail(item.itemId)
-                        },
-                        onDelete = { viewModel.deleteNotification(item.id) }
-                    )
-                }
+            items(notifications, key = { it.id }) { item ->
+                NotificationItemCard(
+                    item = item,
+                    onClick = {
+                        haptics.tick()
+                        viewModel.markAsRead(item.id)
+                        onNavigateToDetail(item.itemId)
+                    },
+                    onDelete = {
+                        haptics.tick()
+                        viewModel.deleteNotification(item.id)
+                    },
+                )
             }
         }
     }
@@ -144,77 +150,74 @@ fun NotificationItemCard(
     modifier: Modifier = Modifier
 ) {
     val (icon, tint) = when (item.actionType) {
-        "CREATE" -> Icons.Filled.PlaylistAdd to MaterialTheme.colorScheme.primary
-        "COMPLETE" -> Icons.Filled.Celebration to MaterialTheme.colorScheme.secondary
-        "DELETE" -> Icons.Filled.Delete to MaterialTheme.colorScheme.error
-        else -> Icons.Filled.Edit to MaterialTheme.colorScheme.tertiary
+        "CREATE" -> Icons.Filled.PlaylistAdd to Primary
+        "COMPLETE" -> Icons.Filled.Celebration to Income
+        "DELETE" -> Icons.Filled.Delete to Danger
+        else -> Icons.Filled.Edit to Due
     }
 
     val timeStr = formatRelativeTime(item.timestamp)
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (!item.isRead) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
+    OurListCard(
+        modifier = modifier.fillMaxWidth(),
+        containerColor = if (!item.isRead) SurfaceRaised else Surface,
+        border = BorderStroke(
+            1.dp,
+            if (!item.isRead) Primary.copy(alpha = 0.4f) else Divider,
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        onClick = onClick,
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = tint.copy(alpha = 0.15f)
+            // Action Icon Pill
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(tint.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = tint,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp),
+                )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.message,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Normal
+                    fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Normal,
+                    color = TextPrimary,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
+                    StatusPill(
                         text = item.collection.displayName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = tint,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = timeStr,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = TextTertiary,
                     )
                 }
             }
 
             if (!item.isRead) {
-                Surface(
-                    modifier = Modifier.size(8.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary
-                ) {}
+                Box(
+                    modifier = Modifier
+                        .size(9.dp)
+                        .clip(CircleShape)
+                        .background(Primary),
+                )
             }
         }
     }

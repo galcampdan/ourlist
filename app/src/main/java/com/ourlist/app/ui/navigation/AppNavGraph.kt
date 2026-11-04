@@ -59,6 +59,7 @@ fun AppNavGraph(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = com.ourlist.app.ui.theme.Ink,
         bottomBar = {
             if (isBottomBarVisible) {
                 AppBottomBar(
