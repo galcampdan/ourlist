@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Our List</string>
+    <string name="notification_channel_name">버킷리스트 알림</string>
+    <string name="notification_channel_desc">목표 날짜 사전 알림 및 당일 알림</string>
+</resources>
