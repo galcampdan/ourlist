@@ -68,12 +68,15 @@ fun DriveSetupScreen(
     val userName by dataStoreManager.userNameFlow.collectAsState(initial = "")
     val partnerEmail by dataStoreManager.partnerEmailFlow.collectAsState(initial = "")
     val partnerName by dataStoreManager.partnerNameFlow.collectAsState(initial = "")
+    val googleAuthToken by dataStoreManager.googleAuthTokenFlow.collectAsState(initial = "")
 
     var inputFolderId by remember(currentFolderId) { mutableStateOf(currentFolderId) }
     var inputUserEmail by remember(userEmail) { mutableStateOf(userEmail) }
     var inputUserName by remember(userName) { mutableStateOf(userName) }
     var inputPartnerEmail by remember(partnerEmail) { mutableStateOf(partnerEmail) }
     var inputPartnerName by remember(partnerName) { mutableStateOf(partnerName) }
+    var inputAuthToken by remember(googleAuthToken) { mutableStateOf(googleAuthToken) }
+    var isTestingConnection by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -176,7 +179,7 @@ fun DriveSetupScreen(
                 }
             }
 
-            // Folder ID Section
+            // Folder ID & Token Section
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp)
@@ -185,7 +188,7 @@ fun DriveSetupScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Filled.Cloud, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "공유 폴더 설정", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(text = "공유 폴더 및 인증 설정", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     OutlinedTextField(
                         value = inputFolderId,
@@ -200,6 +203,51 @@ fun DriveSetupScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    OutlinedTextField(
+                        value = inputAuthToken,
+                        onValueChange = { inputAuthToken = it },
+                        label = { Text("Google OAuth Access Token (선택/테스트용)") },
+                        placeholder = { Text("Bearer ya29....") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                    Text(
+                        text = "Google Cloud Console에서 발급된 테스트 Access Token 또는 로그인 토큰입니다. 실기기 Drive API 통신 시 사용됩니다.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            if (inputFolderId.isBlank()) {
+                                Toast.makeText(context, "폴더 ID를 먼저 입력해주세요.", Toast.LENGTH_SHORT).show()
+                                return@OutlinedButton
+                            }
+                            isTestingConnection = true
+                            coroutineScope.launch {
+                                // Save token temporarily to test
+                                dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
+                                try {
+                                    val files = driveClient.listFilesInFolder(inputFolderId.trim())
+                                    Toast.makeText(context, "Google Drive 연결 성공! 폴더 내 ${files.size}개 파일 확인됨.", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Google Drive 연결 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                                } finally {
+                                    isTestingConnection = false
+                                }
+                            }
+                        },
+                        enabled = !isTestingConnection,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isTestingConnection) "연결 확인 중..." else "Google Drive API 연결 테스트")
+                    }
                 }
             }
 
@@ -217,7 +265,8 @@ fun DriveSetupScreen(
                             name = inputPartnerName.trim().ifEmpty { "상대방" }
                         )
                         dataStoreManager.setSharedFolderId(inputFolderId.trim())
-                        Toast.makeText(context, "공유 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                        dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
+                        Toast.makeText(context, "공유 및 인증 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
                         onNavigateBack()
                     }
                 },

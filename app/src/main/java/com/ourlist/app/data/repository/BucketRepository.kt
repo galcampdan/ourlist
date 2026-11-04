@@ -107,6 +107,16 @@ class BucketRepository(
             val userName = dataStoreManager.userNameFlow.first()
             val seq = dataStoreManager.getNextDeviceSequence()
 
+            val changedFields = mutableListOf<String>()
+            if (existing.title != finalItem.title) changedFields.add("title")
+            if (existing.wishType != finalItem.wishType) changedFields.add("wishType")
+            if (existing.targetDate != finalItem.targetDate) changedFields.add("targetDate")
+            if (existing.estimatedCostKRW != finalItem.estimatedCostKRW) changedFields.add("estimatedCostKRW")
+            if (existing.placeText != finalItem.placeText) changedFields.add("placeText")
+            if (existing.memo != finalItem.memo) changedFields.add("memo")
+            if (existing.checklist != finalItem.checklist) changedFields.add("checklist")
+            val fieldPathStr = if (changedFields.isEmpty()) null else changedFields.joinToString(",")
+
             val op = SyncOperation(
                 opId = UUID.randomUUID().toString(),
                 collection = finalItem.collection,
@@ -115,6 +125,7 @@ class BucketRepository(
                 actorName = userName,
                 itemId = finalItem.id,
                 kind = OpKind.UPDATE_FIELD,
+                fieldPath = fieldPathStr,
                 itemSnapshotJson = json.encodeToString(finalItem),
                 createdAt = now,
                 deviceSequence = seq

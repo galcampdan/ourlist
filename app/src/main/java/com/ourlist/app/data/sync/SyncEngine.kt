@@ -167,6 +167,18 @@ class SyncEngine(
         val localEntity = bucketDao.getItemById(op.itemId)
         val localItem = localEntity?.toDomain()
 
+        // Check pending local operations for this item to determine true causal concurrency
+        val pendingOps = syncDao.getPendingOpsForItem(op.itemId)
+        val hasPendingLocalOps = pendingOps.isNotEmpty()
+        val localPendingDelete = pendingOps.any { it.kind == OpKind.DELETE.name }
+        val localPendingUpdate = pendingOps.any { it.kind == OpKind.UPDATE_FIELD.name }
+        val locallyModifiedFields = pendingOps
+            .filter { it.kind == OpKind.UPDATE_FIELD.name }
+            .mapNotNull { it.fieldPath }
+            .flatMap { it.split(",") }
+            .map { it.trim() }
+            .toSet()
+
         when (op.kind) {
             OpKind.CREATE -> {
                 if (localItem == null) {
@@ -190,46 +202,108 @@ class SyncEngine(
 
             OpKind.UPDATE_FIELD -> {
                 if (localItem != null) {
+                    if (localPendingDelete) {
+                        // Conflict: local deleted, remote updated
+                        createDeleteVsUpdateConflict(localItem, "내 삭제 유지", "상대방 수정본 복원", op)
+                        return
+                    }
+
                     val remoteSnapshot = op.itemSnapshotJson?.let {
                         try { json.decodeFromString<BucketItem>(it) } catch (e: Exception) { null }
                     }
 
                     if (remoteSnapshot != null) {
-                        // Check for field-level concurrency conflict
-                        val hasLocalEdit = localItem.updatedAt > op.createdAt
-                        if (hasLocalEdit && localItem.title != remoteSnapshot.title && op.fieldPath == "title") {
-                            // Conflict detected on title
-                            conflictDao.insert(
-                                ConflictEntity(
-                                    conflictId = UUID.randomUUID().toString(),
-                                    itemId = localItem.id,
-                                    itemTitle = localItem.title,
-                                    collection = localItem.collection.name,
-                                    conflictType = ConflictType.FIELD_CONFLICT.name,
-                                    fieldPath = "title",
-                                    localValue = localItem.title,
-                                    remoteValue = remoteSnapshot.title,
-                                    remoteActorName = op.actorName,
-                                    remoteUpdatedAt = op.createdAt,
-                                    createdAt = System.currentTimeMillis(),
-                                    isResolved = false
-                                )
-                            )
-                        } else {
-                            // Auto-merge non-conflicting fields
-                            val mergedItem = localItem.copy(
-                                title = if (!hasLocalEdit) remoteSnapshot.title else localItem.title,
-                                targetDate = if (!hasLocalEdit || localItem.targetDate == null) remoteSnapshot.targetDate else localItem.targetDate,
-                                placeText = if (!hasLocalEdit || localItem.placeText.isNullOrEmpty()) remoteSnapshot.placeText else localItem.placeText,
-                                memo = if (!hasLocalEdit || localItem.memo.isNullOrEmpty()) remoteSnapshot.memo else localItem.memo,
-                                estimatedCostKRW = if (!hasLocalEdit || localItem.estimatedCostKRW == null) remoteSnapshot.estimatedCostKRW else localItem.estimatedCostKRW,
-                                wishType = if (!hasLocalEdit) remoteSnapshot.wishType else localItem.wishType,
-                                updatedAt = System.currentTimeMillis()
-                            )
-                            bucketDao.upsert(BucketItemEntity.fromDomain(mergedItem))
-                            val isReminderOn = dataStoreManager.isReminderEnabled(mergedItem.id)
-                            reminderScheduler.scheduleRemindersForItem(mergedItem, isReminderOn)
+                        var mergedTitle = localItem.title
+                        var mergedWishType = localItem.wishType
+                        var mergedTargetDate = localItem.targetDate
+                        var mergedCost = localItem.estimatedCostKRW
+                        var mergedPlace = localItem.placeText
+                        var mergedMemo = localItem.memo
+
+                        // Title check
+                        if (localItem.title != remoteSnapshot.title) {
+                            if (locallyModifiedFields.contains("title")) {
+                                createFieldConflict(localItem, "title", localItem.title, remoteSnapshot.title, op)
+                            } else {
+                                mergedTitle = remoteSnapshot.title
+                            }
                         }
+
+                        // WishType check
+                        if (localItem.wishType != remoteSnapshot.wishType) {
+                            if (locallyModifiedFields.contains("wishType")) {
+                                createFieldConflict(localItem, "wishType", localItem.wishType.name, remoteSnapshot.wishType.name, op)
+                            } else {
+                                mergedWishType = remoteSnapshot.wishType
+                            }
+                        }
+
+                        // TargetDate check
+                        if (localItem.targetDate != remoteSnapshot.targetDate) {
+                            if (locallyModifiedFields.contains("targetDate")) {
+                                createFieldConflict(localItem, "targetDate", localItem.targetDate, remoteSnapshot.targetDate, op)
+                            } else {
+                                mergedTargetDate = remoteSnapshot.targetDate
+                            }
+                        }
+
+                        // EstimatedCost check
+                        if (localItem.estimatedCostKRW != remoteSnapshot.estimatedCostKRW) {
+                            if (locallyModifiedFields.contains("estimatedCostKRW")) {
+                                createFieldConflict(localItem, "estimatedCostKRW", localItem.estimatedCostKRW?.toString(), remoteSnapshot.estimatedCostKRW?.toString(), op)
+                            } else {
+                                mergedCost = remoteSnapshot.estimatedCostKRW
+                            }
+                        }
+
+                        // PlaceText check
+                        if (localItem.placeText != remoteSnapshot.placeText) {
+                            if (locallyModifiedFields.contains("placeText")) {
+                                createFieldConflict(localItem, "placeText", localItem.placeText, remoteSnapshot.placeText, op)
+                            } else {
+                                mergedPlace = remoteSnapshot.placeText
+                            }
+                        }
+
+                        // Memo check
+                        if (localItem.memo != remoteSnapshot.memo) {
+                            if (locallyModifiedFields.contains("memo")) {
+                                createFieldConflict(localItem, "memo", localItem.memo, remoteSnapshot.memo, op)
+                            } else {
+                                mergedMemo = remoteSnapshot.memo
+                            }
+                        }
+
+                        // Checklist 3-Way Union Merge
+                        val localMap = localItem.checklist.associateBy { it.id }.toMutableMap()
+                        for (remoteCheck in remoteSnapshot.checklist) {
+                            val existingLocal = localMap[remoteCheck.id]
+                            if (existingLocal == null) {
+                                localMap[remoteCheck.id] = remoteCheck
+                            } else {
+                                val hasPendingToggle = pendingOps.any {
+                                    it.kind == OpKind.CHECKLIST_TOGGLE.name && it.fieldPath == remoteCheck.id
+                                }
+                                if (!hasPendingToggle) {
+                                    localMap[remoteCheck.id] = remoteCheck
+                                }
+                            }
+                        }
+                        val mergedChecklist = localMap.values.toList()
+
+                        val mergedItem = localItem.copy(
+                            title = mergedTitle,
+                            wishType = mergedWishType,
+                            targetDate = mergedTargetDate,
+                            estimatedCostKRW = mergedCost,
+                            placeText = mergedPlace,
+                            memo = mergedMemo,
+                            checklist = mergedChecklist,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        bucketDao.upsert(BucketItemEntity.fromDomain(mergedItem))
+                        val isReminderOn = dataStoreManager.isReminderEnabled(mergedItem.id)
+                        reminderScheduler.scheduleRemindersForItem(mergedItem, isReminderOn)
                     }
 
                     notificationRepository.recordPartnerAction(
@@ -255,7 +329,7 @@ class SyncEngine(
             }
 
             OpKind.CHECKLIST_EDIT -> {
-                // Auto-merged
+                // Merged via snapshot checklist merge
             }
 
             OpKind.COMPLETE -> {
@@ -300,25 +374,9 @@ class SyncEngine(
 
             OpKind.DELETE -> {
                 if (localItem != null) {
-                    val hasLocalRecentEdit = localItem.updatedAt > op.createdAt
-                    if (hasLocalRecentEdit && localItem.deletedAt == null) {
-                        // Delete vs Update Conflict!
-                        conflictDao.insert(
-                            ConflictEntity(
-                                conflictId = UUID.randomUUID().toString(),
-                                itemId = localItem.id,
-                                itemTitle = localItem.title,
-                                collection = localItem.collection.name,
-                                conflictType = ConflictType.DELETE_VS_UPDATE.name,
-                                fieldPath = null,
-                                localValue = "내 수정본 유지",
-                                remoteValue = "상대방의 삭제 수용",
-                                remoteActorName = op.actorName,
-                                remoteUpdatedAt = op.createdAt,
-                                createdAt = System.currentTimeMillis(),
-                                isResolved = false
-                            )
-                        )
+                    if (localPendingUpdate && localItem.deletedAt == null) {
+                        // Conflict: local updated, remote deleted
+                        createDeleteVsUpdateConflict(localItem, "내 수정본 유지", "상대방의 삭제 수용", op)
                     } else {
                         val deletedTime = op.fieldValueJson?.toLongOrNull() ?: op.createdAt
                         val updated = localItem.copy(deletedAt = deletedTime, updatedAt = System.currentTimeMillis())
@@ -355,6 +413,55 @@ class SyncEngine(
                 // Handled idempotently via op
             }
         }
+    }
+
+    private suspend fun createFieldConflict(
+        localItem: BucketItem,
+        fieldPath: String,
+        localValue: String?,
+        remoteValue: String?,
+        op: SyncOperation
+    ) {
+        conflictDao.insert(
+            ConflictEntity(
+                conflictId = UUID.randomUUID().toString(),
+                itemId = localItem.id,
+                itemTitle = localItem.title,
+                collection = localItem.collection.name,
+                conflictType = ConflictType.FIELD_CONFLICT.name,
+                fieldPath = fieldPath,
+                localValue = localValue,
+                remoteValue = remoteValue,
+                remoteActorName = op.actorName,
+                remoteUpdatedAt = op.createdAt,
+                createdAt = System.currentTimeMillis(),
+                isResolved = false
+            )
+        )
+    }
+
+    private suspend fun createDeleteVsUpdateConflict(
+        localItem: BucketItem,
+        localChoiceText: String,
+        remoteChoiceText: String,
+        op: SyncOperation
+    ) {
+        conflictDao.insert(
+            ConflictEntity(
+                conflictId = UUID.randomUUID().toString(),
+                itemId = localItem.id,
+                itemTitle = localItem.title,
+                collection = localItem.collection.name,
+                conflictType = ConflictType.DELETE_VS_UPDATE.name,
+                fieldPath = null,
+                localValue = localChoiceText,
+                remoteValue = remoteChoiceText,
+                remoteActorName = op.actorName,
+                remoteUpdatedAt = op.createdAt,
+                createdAt = System.currentTimeMillis(),
+                isResolved = false
+            )
+        )
     }
 
     private suspend fun updateRemoteSnapshots(folderId: String) {

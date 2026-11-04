@@ -39,6 +39,7 @@ class DataStoreManager(private val context: Context) {
         val LAST_SYNC_TIME = longPreferencesKey("last_sync_time")
         val LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
         val BACKUP_RECOVERY_CODE = stringPreferencesKey("backup_recovery_code")
+        val GOOGLE_AUTH_TOKEN = stringPreferencesKey("google_auth_token")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -181,5 +182,11 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun setRecoveryCode(code: String) {
         context.dataStore.edit { it[Keys.BACKUP_RECOVERY_CODE] = code }
+    }
+
+    val googleAuthTokenFlow: Flow<String> = context.dataStore.data.map { it[Keys.GOOGLE_AUTH_TOKEN] ?: "" }
+
+    suspend fun setGoogleAuthToken(token: String) {
+        context.dataStore.edit { it[Keys.GOOGLE_AUTH_TOKEN] = token }
     }
 }

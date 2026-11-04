@@ -1,7 +1,13 @@
 package com.ourlist.app
 
 import android.app.Application
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.ourlist.app.data.alarm.ReminderScheduler
+import com.ourlist.app.data.backup.AutoBackupWorker
 import com.ourlist.app.data.backup.BackupManager
 import com.ourlist.app.data.local.DataStoreManager
 import com.ourlist.app.data.local.OurListDatabase
@@ -13,7 +19,9 @@ import com.ourlist.app.data.sync.SyncEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 class OurListApp : Application() {
 
@@ -55,8 +63,7 @@ class OurListApp : Application() {
         ReminderScheduler.createNotificationChannel(this)
 
         driveClient = DriveSyncClient {
-            // Token provider: returns current auth token if connected
-            null
+            dataStoreManager.googleAuthTokenFlow.first().ifBlank { null }
         }
 
         notificationRepository = NotificationRepository(database)
@@ -81,6 +88,15 @@ class OurListApp : Application() {
         scope.launch(Dispatchers.IO) {
             dataStoreManager.getOrCreateDeviceId()
             bucketRepository.purgeOldTrash()
+
+            val backupWorkRequest = PeriodicWorkRequestBuilder<AutoBackupWorker>(24, TimeUnit.HOURS)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .build()
+            WorkManager.getInstance(this@OurListApp).enqueueUniquePeriodicWork(
+                "OurListAutoBackup",
+                ExistingPeriodicWorkPolicy.KEEP,
+                backupWorkRequest
+            )
         }
     }
 }
