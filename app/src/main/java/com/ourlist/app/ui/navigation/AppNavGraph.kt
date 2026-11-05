@@ -353,6 +353,7 @@ fun MainTabsScreen(
                     MoreScreen(
                         dataStoreManager = app.dataStoreManager,
                         syncEngine = app.syncEngine,
+                        safBackupManager = app.safBackupManager,
                         db = app.database,
                         onNavigate = onNavigate
                     )

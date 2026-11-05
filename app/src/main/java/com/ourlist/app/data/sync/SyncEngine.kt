@@ -1,6 +1,7 @@
 package com.ourlist.app.data.sync
 
 import com.ourlist.app.data.alarm.ReminderScheduler
+import com.ourlist.app.data.backup.SafBackupManager
 import com.ourlist.app.data.local.DataStoreManager
 import com.ourlist.app.data.local.OurListDatabase
 import com.ourlist.app.data.local.entity.BucketItemEntity
@@ -39,7 +40,8 @@ class SyncEngine(
     private val notificationRepository: NotificationRepository,
     private val reminderScheduler: ReminderScheduler,
     private val driveClient: DriveSyncClient,
-    private val coupleClient: CoupleSyncClient? = null
+    private val coupleClient: CoupleSyncClient? = null,
+    private val safBackupManager: SafBackupManager? = null
 ) {
     private val bucketDao = db.bucketDao()
     private val syncDao = db.syncOperationDao()
@@ -57,6 +59,9 @@ class SyncEngine(
                 val coupleCode = dataStoreManager.coupleCodeFlow.first().trim()
                 if (coupleCode.isNotEmpty() && coupleClient != null) {
                     val result = syncViaCoupleCode(coupleCode)
+                    if (result is SyncState.Success) {
+                        try { safBackupManager?.backupNow() } catch (e: Exception) { /* non-fatal */ }
+                    }
                     _syncState.value = result
                     return@withContext result
                 }
@@ -64,6 +69,9 @@ class SyncEngine(
                 val folderId = dataStoreManager.sharedFolderIdFlow.first().trim()
                 if (folderId.isNotEmpty()) {
                     val result = syncViaDrive(folderId)
+                    if (result is SyncState.Success) {
+                        try { safBackupManager?.backupNow() } catch (e: Exception) { /* non-fatal */ }
+                    }
                     _syncState.value = result
                     return@withContext result
                 }

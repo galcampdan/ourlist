@@ -9,6 +9,7 @@ import androidx.work.WorkManager
 import com.ourlist.app.data.alarm.ReminderScheduler
 import com.ourlist.app.data.backup.AutoBackupWorker
 import com.ourlist.app.data.backup.BackupManager
+import com.ourlist.app.data.backup.SafBackupManager
 import com.ourlist.app.data.local.DataStoreManager
 import com.ourlist.app.data.local.OurListDatabase
 import com.ourlist.app.data.repository.BucketRepository
@@ -58,6 +59,9 @@ class OurListApp : Application() {
     lateinit var backupManager: BackupManager
         private set
 
+    lateinit var safBackupManager: SafBackupManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
 
@@ -98,13 +102,16 @@ class OurListApp : Application() {
         conflictRepository = ConflictRepository(database, dataStoreManager)
         bucketRepository = BucketRepository(database, dataStoreManager, reminderScheduler)
 
+        safBackupManager = SafBackupManager(this, database, dataStoreManager)
+
         syncEngine = SyncEngine(
             db = database,
             dataStoreManager = dataStoreManager,
             notificationRepository = notificationRepository,
             reminderScheduler = reminderScheduler,
             driveClient = driveClient,
-            coupleClient = coupleClient
+            coupleClient = coupleClient,
+            safBackupManager = safBackupManager
         )
 
         backupManager = BackupManager(

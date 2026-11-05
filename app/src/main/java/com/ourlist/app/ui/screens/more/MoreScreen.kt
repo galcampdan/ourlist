@@ -2,6 +2,9 @@ package com.ourlist.app.ui.screens.more
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,8 +29,10 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FolderShared
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import com.ourlist.app.data.backup.SafBackupManager
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
@@ -56,6 +61,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ourlist.app.data.backup.ExportManager
 import com.ourlist.app.data.local.DataStoreManager
 import com.ourlist.app.data.local.OurListDatabase
@@ -66,6 +72,7 @@ import com.ourlist.app.ui.components.OurListCard
 import com.ourlist.app.ui.components.SectionHeader
 import com.ourlist.app.ui.navigation.AppRoutes
 import com.ourlist.app.ui.rememberHaptics
+import com.ourlist.app.ui.theme.Danger
 import com.ourlist.app.ui.theme.Divider
 import com.ourlist.app.ui.theme.Due
 import com.ourlist.app.ui.theme.Income
@@ -89,6 +96,7 @@ import java.util.Locale
 fun MoreScreen(
     dataStoreManager: DataStoreManager,
     syncEngine: SyncEngine,
+    safBackupManager: SafBackupManager,
     db: OurListDatabase,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -102,6 +110,34 @@ fun MoreScreen(
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
     val userEmail by dataStoreManager.userEmailFlow.collectAsState(initial = "")
     val sharedFolderId by dataStoreManager.sharedFolderIdFlow.collectAsState(initial = "")
+
+    val safFolderUri by dataStoreManager.safBackupTreeUriFlow.collectAsState(initial = "")
+    val safBackupEnabled by dataStoreManager.safBackupEnabledFlow.collectAsState(initial = true)
+    val lastSafBackupTime by dataStoreManager.lastSafBackupTimeFlow.collectAsState(initial = 0L)
+    var showSafFolderDialog by remember { mutableStateOf(false) }
+    var isBackingUpSaf by remember { mutableStateOf(false) }
+
+    val safFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (e: Exception) {
+                // ignore
+            }
+            coroutineScope.launch {
+                dataStoreManager.setSafBackupTreeUri(uri.toString())
+                val res = safBackupManager.backupNow(uri.toString())
+                if (res.isSuccess) {
+                    Toast.makeText(context, "Google Drive 백업 폴더가 연결되었고, 즉시 백업되었습니다! (${res.getOrNull()}개 항목)", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "폴더 연결됨 (백업 오류: ${res.exceptionOrNull()?.message})", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
     var showExportDialog by remember { mutableStateOf(false) }
 
@@ -316,13 +352,17 @@ fun MoreScreen(
                             color = Divider,
                         )
                         MoreMenuItem(
-                            icon = Icons.Filled.Cloud,
-                            iconTint = Review,
-                            title = "Google 계정 및 공유 Drive (선택)",
-                            subtitle = if (sharedFolderId.isNotEmpty()) "연결됨: $sharedFolderId" else "공유 폴더 설정",
+                            icon = Icons.Filled.FolderShared,
+                            iconTint = Income,
+                            title = "Google Drive 폴더 자동 백업",
+                            subtitle = if (safFolderUri.isNotBlank()) "연결됨: ${safBackupManager.getFriendlyFolderName(safFolderUri)}" else "OurList 폴더 지정 시 자동 백업",
                             onClick = {
                                 haptics.tick()
-                                onNavigate(AppRoutes.DRIVE_SETUP)
+                                if (safFolderUri.isBlank()) {
+                                    safFolderLauncher.launch(null)
+                                } else {
+                                    showSafFolderDialog = true
+                                }
                             },
                         )
                         HorizontalDivider(
@@ -374,7 +414,7 @@ fun MoreScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Our List v1.0.0",
+                                text = "Our List v1.0.4",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary,
@@ -382,7 +422,7 @@ fun MoreScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "커플 2명을 위한 서버 없는 안전한 버킷리스트 앱.\nGoogle Drive 공유 폴더를 통해 데이터가 직접 동기화되며, 개인 데이터는 AES-256-GCM으로 안전하게 보호됩니다.",
+                            text = "커플 2명을 위한 실시간 동기화 버킷리스트 앱.\nFirebase 실시간 통신망과 Google Drive 자동 백업으로 데이터를 가장 안전하게 보호합니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                         )
@@ -390,6 +430,93 @@ fun MoreScreen(
                 }
             }
         }
+    }
+
+    if (showSafFolderDialog) {
+        val lastSafStr = if (lastSafBackupTime > 0) {
+            SimpleDateFormat("yyyy.MM.dd a h:mm", Locale.KOREA).format(Date(lastSafBackupTime))
+        } else "백업 기록 없음"
+
+        AlertDialog(
+            onDismissRequest = { showSafFolderDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Filled.FolderShared, contentDescription = null, tint = Income, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Google Drive 백업 관리", color = TextPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "현재 연결된 폴더:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                    Text(
+                        text = safBackupManager.getFriendlyFolderName(safFolderUri),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Income
+                    )
+                    Text(
+                        text = "최근 백업: $lastSafStr\n\nFirebase로 실시간 동기화될 때마다, 위 폴더의 bucketlist.json과 heart.json도 자동으로 최신 상태로 저장됩니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        lineHeight = 18.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        haptics.confirm()
+                        isBackingUpSaf = true
+                        coroutineScope.launch {
+                            val res = safBackupManager.backupNow()
+                            isBackingUpSaf = false
+                            if (res.isSuccess) {
+                                Toast.makeText(context, "Google Drive 백업 완료! (${res.getOrNull()}개 항목)", Toast.LENGTH_SHORT).show()
+                                showSafFolderDialog = false
+                            } else {
+                                Toast.makeText(context, "백업 실패: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    enabled = !isBackingUpSaf,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink)
+                ) {
+                    if (isBackingUpSaf) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Ink)
+                        Spacer(Modifier.width(6.dp))
+                        Text("백업 중…")
+                    } else {
+                        Text("지금 즉시 백업", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        showSafFolderDialog = false
+                        safFolderLauncher.launch(null)
+                    }) {
+                        Text("폴더 변경", color = TextSecondary)
+                    }
+                    TextButton(onClick = {
+                        coroutineScope.launch {
+                            dataStoreManager.setSafBackupTreeUri("")
+                            showSafFolderDialog = false
+                            Toast.makeText(context, "백업 폴더 연결이 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Text("연결 해제", color = Danger)
+                    }
+                }
+            },
+            containerColor = Surface,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 }
 

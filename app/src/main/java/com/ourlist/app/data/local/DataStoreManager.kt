@@ -42,6 +42,9 @@ class DataStoreManager(private val context: Context) {
         val GOOGLE_AUTH_TOKEN = stringPreferencesKey("google_auth_token")
         val COUPLE_CODE = stringPreferencesKey("couple_code")
         val FIREBASE_RTDB_URL = stringPreferencesKey("firebase_rtdb_url")
+        val SAF_BACKUP_TREE_URI = stringPreferencesKey("saf_backup_tree_uri")
+        val SAF_BACKUP_ENABLED = booleanPreferencesKey("saf_backup_enabled")
+        val LAST_SAF_BACKUP_TIME = longPreferencesKey("last_saf_backup_time")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -81,6 +84,9 @@ class DataStoreManager(private val context: Context) {
     val firebaseRtdbUrlFlow: Flow<String> = context.dataStore.data.map {
         it[Keys.FIREBASE_RTDB_URL] ?: "https://ourlist-4462e-default-rtdb.firebaseio.com"
     }
+    val safBackupTreeUriFlow: Flow<String> = context.dataStore.data.map { it[Keys.SAF_BACKUP_TREE_URI] ?: "" }
+    val safBackupEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[Keys.SAF_BACKUP_ENABLED] ?: true }
+    val lastSafBackupTimeFlow: Flow<Long> = context.dataStore.data.map { it[Keys.LAST_SAF_BACKUP_TIME] ?: 0L }
 
     val viewModeFlow: Flow<ViewMode> = context.dataStore.data.map {
         val name = it[Keys.VIEW_MODE] ?: ViewMode.LIST.name
@@ -148,6 +154,18 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun setFirebaseRtdbUrl(url: String) {
         context.dataStore.edit { it[Keys.FIREBASE_RTDB_URL] = url }
+    }
+
+    suspend fun setSafBackupTreeUri(uri: String) {
+        context.dataStore.edit { it[Keys.SAF_BACKUP_TREE_URI] = uri }
+    }
+
+    suspend fun setSafBackupEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SAF_BACKUP_ENABLED] = enabled }
+    }
+
+    suspend fun setLastSafBackupTime(time: Long) {
+        context.dataStore.edit { it[Keys.LAST_SAF_BACKUP_TIME] = time }
     }
 
     suspend fun setViewMode(mode: ViewMode) {
