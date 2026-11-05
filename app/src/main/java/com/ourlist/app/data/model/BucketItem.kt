@@ -35,4 +35,27 @@ data class BucketItem(
 
     val isDone: Boolean
         get() = status == BucketStatus.DONE
+
+    /**
+     * Resolves human-readable creator name relative to the current device user.
+     * Prevents partner's items from displaying "나" on my device.
+     */
+    fun getDisplayCreatorName(myDeviceId: String, myUserSub: String = "", partnerName: String = "상대방"): String {
+        if (collection == BucketCollection.PERSONAL || collection == BucketCollection.SECRET_LOCAL) {
+            return "나"
+        }
+        val isMe = (myDeviceId.isNotEmpty() && createdBy == myDeviceId) ||
+                (myUserSub.isNotEmpty() && createdBy == myUserSub)
+        return if (createdBy.isEmpty() || isMe) {
+            "나"
+        } else {
+            if (partnerName.isNotBlank() && partnerName != "상대방") {
+                partnerName
+            } else if (createdByName.isNotBlank() && createdByName != "나") {
+                createdByName
+            } else {
+                "상대방"
+            }
+        }
+    }
 }

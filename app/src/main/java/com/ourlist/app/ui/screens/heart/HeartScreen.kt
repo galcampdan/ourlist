@@ -78,6 +78,9 @@ fun HeartScreen(
     val selectedWishTypes by viewModel.selectedWishTypes.collectAsState()
     val syncState by viewModel.syncState.collectAsState()
     val dreamGaugeStats by viewModel.dreamGaugeStats.collectAsState()
+    val myDeviceId by viewModel.myDeviceId.collectAsState()
+    val myUserSub by viewModel.myUserSub.collectAsState()
+    val partnerName by viewModel.partnerName.collectAsState()
 
     val haptics = rememberHaptics()
     val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
@@ -277,6 +280,9 @@ fun HeartScreen(
                             viewModel.toggleChecklistItem(item.id, checkId, checked)
                         },
                         modifier = itemModifier,
+                        myDeviceId = myDeviceId,
+                        myUserSub = myUserSub,
+                        partnerName = partnerName,
                     )
                 } else {
                     BucketItemRow(

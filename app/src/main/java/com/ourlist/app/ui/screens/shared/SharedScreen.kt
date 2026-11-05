@@ -98,6 +98,9 @@ fun SharedScreen(
     val unresolvedConflicts by viewModel.unresolvedConflicts.collectAsState()
     val dreamGaugeStats by viewModel.dreamGaugeStats.collectAsState()
     val datingStartDate by viewModel.datingStartDate.collectAsState()
+    val myDeviceId by viewModel.myDeviceId.collectAsState()
+    val myUserSub by viewModel.myUserSub.collectAsState()
+    val partnerName by viewModel.partnerName.collectAsState()
 
     val haptics = rememberHaptics()
     var activeConflictToResolve by remember { mutableStateOf<ConflictRecord?>(null) }
@@ -418,6 +421,9 @@ fun SharedScreen(
                             viewModel.toggleChecklistItem(item.id, checkId, checked)
                         },
                         modifier = itemModifier,
+                        myDeviceId = myDeviceId,
+                        myUserSub = myUserSub,
+                        partnerName = partnerName,
                     )
                 } else {
                     BucketItemRow(

@@ -1,6 +1,5 @@
 package com.ourlist.app.ui.screens.more
 
-import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -79,6 +78,7 @@ import com.ourlist.app.data.sync.SyncEngine
 import com.ourlist.app.data.sync.SyncState
 import com.ourlist.app.ui.components.HomeHeader
 import com.ourlist.app.ui.components.OurListCard
+import com.ourlist.app.ui.components.OurListDatePickerDialog
 import com.ourlist.app.ui.components.SectionHeader
 import com.ourlist.app.ui.navigation.AppRoutes
 import com.ourlist.app.ui.rememberHaptics
@@ -132,36 +132,11 @@ fun MoreScreen(
     var isBackingUpSaf by remember { mutableStateOf(false) }
 
     var showDatingDateManageDialog by remember { mutableStateOf(false) }
+    var showDatingDatePickerDialog by remember { mutableStateOf(false) }
 
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var availableUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
-
-    fun showNativeDatePicker() {
-        val parts = datingStartDate.split("-")
-        val initYear = parts.getOrNull(0)?.toIntOrNull() ?: LocalDate.now().year
-        val initMonth = (parts.getOrNull(1)?.toIntOrNull() ?: LocalDate.now().monthValue) - 1
-        val initDay = parts.getOrNull(2)?.toIntOrNull() ?: LocalDate.now().dayOfMonth
-
-        val datePickerDialog = DatePickerDialog(
-            context,
-            { _, year, month, dayOfMonth ->
-                val formatted = "%04d-%02d-%02d".format(year, month + 1, dayOfMonth)
-                coroutineScope.launch {
-                    dataStoreManager.setDatingStartDate(formatted)
-                    if (coupleCode.isNotBlank()) {
-                        coupleClient.updateDatingStartDate(coupleCode, formatted)
-                    }
-                    val days = DDayCalculator.calculateDays(formatted)
-                    Toast.makeText(context, "사귄 날짜가 저장되었습니다! (함께한 지 ${days}일째 💕)", Toast.LENGTH_SHORT).show()
-                }
-            },
-            initYear,
-            initMonth,
-            initDay
-        )
-        datePickerDialog.show()
-    }
 
     val safFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -443,7 +418,7 @@ fun MoreScreen(
                                 if (datingStartDate.isNotBlank()) {
                                     showDatingDateManageDialog = true
                                 } else {
-                                    showNativeDatePicker()
+                                    showDatingDatePickerDialog = true
                                 }
                             },
                         )
@@ -594,7 +569,7 @@ fun MoreScreen(
                 Button(
                     onClick = {
                         showDatingDateManageDialog = false
-                        showNativeDatePicker()
+                        showDatingDatePickerDialog = true
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink)
                 ) {
@@ -624,6 +599,31 @@ fun MoreScreen(
             },
             containerColor = Surface,
             shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    if (showDatingDatePickerDialog) {
+        OurListDatePickerDialog(
+            initialDate = datingStartDate,
+            title = "사귄 날짜 설정 💕",
+            isPastMode = true,
+            allowClear = true,
+            onDateSelected = { selectedDate ->
+                showDatingDatePickerDialog = false
+                coroutineScope.launch {
+                    dataStoreManager.setDatingStartDate(selectedDate)
+                    if (coupleCode.isNotBlank()) {
+                        coupleClient.updateDatingStartDate(coupleCode, selectedDate)
+                    }
+                    if (selectedDate.isNotBlank()) {
+                        val days = DDayCalculator.calculateDays(selectedDate)
+                        Toast.makeText(context, "사귄 날짜가 저장되었습니다! (함께한 지 ${days}일째 💕)", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "사귄 날짜가 초기화되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { showDatingDatePickerDialog = false }
         )
     }
 

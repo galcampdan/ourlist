@@ -30,6 +30,7 @@ import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,6 +66,9 @@ fun BucketItemCard(
     onCompleteToggle: () -> Unit,
     onChecklistToggle: (String, Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
+    myDeviceId: String = "",
+    myUserSub: String = "",
+    partnerName: String = "상대방",
 ) {
     val haptics = rememberHaptics()
     val isDone = item.isDone
@@ -243,15 +247,14 @@ fun BucketItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (item.createdByName.isNotEmpty()) {
-                    Text(
-                        text = "등록: ${item.createdByName}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
-                    )
-                } else {
-                    Spacer(Modifier.width(1.dp))
+                val creatorDisplayName = remember(item.createdBy, item.createdByName, myDeviceId, myUserSub, partnerName) {
+                    item.getDisplayCreatorName(myDeviceId, myUserSub, partnerName)
                 }
+                Text(
+                    text = "등록: $creatorDisplayName",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary,
+                )
 
                 if (!item.targetDate.isNullOrEmpty()) {
                     Text(

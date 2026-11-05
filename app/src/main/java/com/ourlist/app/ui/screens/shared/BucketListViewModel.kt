@@ -46,6 +46,15 @@ class BucketListViewModel(
     val datingStartDate: StateFlow<String> = dataStoreManager.datingStartDateFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ""
     )
+    val myDeviceId: StateFlow<String> = dataStoreManager.deviceIdFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+    val myUserSub: StateFlow<String> = dataStoreManager.userSubFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+    val partnerName: StateFlow<String> = dataStoreManager.partnerNameFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), "상대방"
+    )
     val viewMode: StateFlow<ViewMode> = dataStoreManager.viewModeFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ViewMode.LIST
     )

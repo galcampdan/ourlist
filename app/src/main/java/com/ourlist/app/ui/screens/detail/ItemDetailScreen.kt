@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -30,10 +31,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DriveFileMove
@@ -80,8 +85,10 @@ import com.ourlist.app.data.model.BucketItem
 import com.ourlist.app.data.model.BucketStatus
 import com.ourlist.app.data.model.ChecklistItem
 import com.ourlist.app.data.model.WishType
+import com.ourlist.app.ui.components.DDayBadge
 import com.ourlist.app.ui.components.MoveItemDialog
 import com.ourlist.app.ui.components.OurListCard
+import com.ourlist.app.ui.components.OurListDatePickerDialog
 import com.ourlist.app.ui.components.OurListSwitch
 import com.ourlist.app.ui.rememberHaptics
 import com.ourlist.app.ui.theme.Danger
@@ -111,6 +118,9 @@ fun ItemDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val myDeviceId by viewModel.myDeviceId.collectAsState()
+    val myUserSub by viewModel.myUserSub.collectAsState()
+    val partnerName by viewModel.partnerName.collectAsState()
     val context = LocalContext.current
     val haptics = rememberHaptics()
 
@@ -159,6 +169,9 @@ fun ItemDetailScreen(
                 onDelete = { viewModel.moveToTrash() },
                 onMoveCollection = { targetCol -> viewModel.moveCollection(targetCol) },
                 onNavigateBack = onNavigateBack,
+                myDeviceId = myDeviceId,
+                myUserSub = myUserSub,
+                partnerName = partnerName,
                 modifier = modifier
             )
         }
@@ -178,6 +191,9 @@ private fun ItemDetailContent(
     onDelete: () -> Unit,
     onMoveCollection: (BucketCollection) -> Unit,
     onNavigateBack: () -> Unit,
+    myDeviceId: String = "",
+    myUserSub: String = "",
+    partnerName: String = "상대방",
     modifier: Modifier = Modifier
 ) {
     val isNew = item.title.isEmpty()
@@ -196,6 +212,7 @@ private fun ItemDetailContent(
     var newChecklistText by remember { mutableStateOf("") }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
+    var showCalendarDialog by remember { mutableStateOf(false) }
 
     // BringIntoView requesters for UI-04 keyboard collision handling
     val checklistBringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -299,6 +316,19 @@ private fun ItemDetailContent(
         )
     }
 
+    if (showCalendarDialog) {
+        OurListDatePickerDialog(
+            initialDate = targetDate,
+            title = if (wishType == WishType.SPECIFIC_DATE) "목표 날짜 선택 (필수)" else "목표 날짜 선택",
+            isPastMode = false,
+            allowClear = (wishType != WishType.SPECIFIC_DATE),
+            onDateSelected = { selected ->
+                targetDate = selected
+            },
+            onDismiss = { showCalendarDialog = false }
+        )
+    }
+
     val wishTypeOptions = listOf(WishType.MUST_DO, WishType.SOMEDAY, WishType.SPECIFIC_DATE)
 
     LazyColumn(
@@ -339,7 +369,7 @@ private fun ItemDetailContent(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "뒤로가기",
                             tint = TextPrimary,
                             modifier = Modifier.size(20.dp),
@@ -372,6 +402,40 @@ private fun ItemDetailContent(
                     colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
                 ) {
                     Text("저장", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        if (!isNew) {
+            item {
+                val creatorDisplayName = remember(item.createdBy, item.createdByName, myDeviceId, myUserSub, partnerName) {
+                    item.getDisplayCreatorName(myDeviceId, myUserSub, partnerName)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "등록: $creatorDisplayName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary,
+                    )
+                    if (item.createdAt > 0L) {
+                        val createdDateStr = remember(item.createdAt) {
+                            java.time.Instant.ofEpochMilli(item.createdAt)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toLocalDate()
+                                .toString()
+                        }
+                        Text(
+                            text = "등록일: $createdDateStr",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary,
+                        )
+                    }
                 }
             }
         }
@@ -476,30 +540,83 @@ private fun ItemDetailContent(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = targetDate,
-                        onValueChange = { targetDate = it },
-                        placeholder = { Text("예: 2026-12-31 (YYYY-MM-DD)", color = TextTertiary) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Filled.CalendarToday,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = TextSecondary,
+                    // Clickable OLED Date Selection Card
+                    val isDateMissing = wishType == WishType.SPECIFIC_DATE && targetDate.isBlank()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SurfaceRaised)
+                            .border(
+                                width = 1.dp,
+                                color = if (isDateMissing) Danger else if (targetDate.isNotBlank()) Primary.copy(alpha = 0.5f) else Divider,
+                                shape = RoundedCornerShape(12.dp)
                             )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
+                            .clickable {
+                                haptics.tick()
+                                showCalendarDialog = true
+                            }
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = if (isDateMissing) Danger else if (targetDate.isNotBlank()) Primary else TextSecondary,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            if (targetDate.isNotBlank()) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = targetDate,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                    )
+                                    DDayBadge(targetDate = targetDate, isCompact = true)
+                                }
+                            } else {
+                                Text(
+                                    text = if (isDateMissing) "목표 날짜를 선택해주세요 (필수)" else "캘린더에서 목표 날짜 선택",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isDateMissing) Danger.copy(alpha = 0.8f) else TextTertiary,
+                                )
+                            }
+                        }
+
+                        if (targetDate.isNotBlank() && wishType != WishType.SPECIFIC_DATE) {
+                            IconButton(
+                                onClick = {
+                                    haptics.tick()
+                                    targetDate = ""
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Clear,
+                                    contentDescription = "날짜 초기화",
+                                    tint = TextTertiary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = TextTertiary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
 
                     Spacer(Modifier.height(14.dp))
 

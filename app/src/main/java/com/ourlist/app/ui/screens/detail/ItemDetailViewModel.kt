@@ -11,8 +11,10 @@ import com.ourlist.app.data.model.ChecklistItem
 import com.ourlist.app.data.model.WishType
 import com.ourlist.app.data.repository.BucketRepository
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -29,6 +31,16 @@ class ItemDetailViewModel(
     private val bucketRepository: BucketRepository,
     private val dataStoreManager: DataStoreManager
 ) : ViewModel() {
+
+    val myDeviceId: StateFlow<String> = dataStoreManager.deviceIdFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+    val myUserSub: StateFlow<String> = dataStoreManager.userSubFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
+    val partnerName: StateFlow<String> = dataStoreManager.partnerNameFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), "상대방"
+    )
 
     private val _uiState = MutableStateFlow<DetailUiState>(DetailUiState.Loading)
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
