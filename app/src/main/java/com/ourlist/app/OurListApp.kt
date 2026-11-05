@@ -14,6 +14,7 @@ import com.ourlist.app.data.local.OurListDatabase
 import com.ourlist.app.data.repository.BucketRepository
 import com.ourlist.app.data.repository.ConflictRepository
 import com.ourlist.app.data.repository.NotificationRepository
+import com.ourlist.app.data.sync.CoupleSyncClient
 import com.ourlist.app.data.sync.DriveSyncClient
 import com.ourlist.app.data.sync.SyncEngine
 import kotlinx.coroutines.CoroutineScope
@@ -37,6 +38,9 @@ class OurListApp : Application() {
         private set
 
     lateinit var driveClient: DriveSyncClient
+        private set
+
+    lateinit var coupleClient: CoupleSyncClient
         private set
 
     lateinit var notificationRepository: NotificationRepository
@@ -86,6 +90,10 @@ class OurListApp : Application() {
             }
         }
 
+        coupleClient = CoupleSyncClient {
+            dataStoreManager.firebaseRtdbUrlFlow.first()
+        }
+
         notificationRepository = NotificationRepository(database)
         conflictRepository = ConflictRepository(database, dataStoreManager)
         bucketRepository = BucketRepository(database, dataStoreManager, reminderScheduler)
@@ -95,7 +103,8 @@ class OurListApp : Application() {
             dataStoreManager = dataStoreManager,
             notificationRepository = notificationRepository,
             reminderScheduler = reminderScheduler,
-            driveClient = driveClient
+            driveClient = driveClient,
+            coupleClient = coupleClient
         )
 
         backupManager = BackupManager(

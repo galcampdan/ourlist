@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -98,6 +99,7 @@ fun MoreScreen(
 
     val syncState by syncEngine.syncState.collectAsState()
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
+    val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
     val userEmail by dataStoreManager.userEmailFlow.collectAsState(initial = "")
     val sharedFolderId by dataStoreManager.sharedFolderIdFlow.collectAsState(initial = "")
 
@@ -135,10 +137,15 @@ fun MoreScreen(
             )
         }
 
-        // 2. Google Drive Sync Card
+        // 2. Realtime Sync Card
         item {
             OurListCard(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptics.tick()
+                        onNavigate(AppRoutes.COUPLE_CONNECT)
+                    },
                 containerColor = Surface,
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
@@ -152,29 +159,34 @@ fun MoreScreen(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(Primary.copy(alpha = 0.15f)),
+                                    .background(if (coupleCode.isNotEmpty()) Income.copy(alpha = 0.15f) else Primary.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Cloud,
+                                    imageVector = if (coupleCode.isNotEmpty()) Icons.Filled.Favorite else Icons.Filled.Sync,
                                     contentDescription = null,
-                                    tint = Primary,
+                                    tint = if (coupleCode.isNotEmpty()) Income else Primary,
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Google Drive 동기화",
+                                    text = if (coupleCode.isNotEmpty()) "커플 실시간 연동 (연결됨)" else "커플 실시간 연동 (미연결)",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary,
                                 )
-                                val emailStr = userEmail.ifEmpty { "계정 연결 필요" }
+                                val subText = if (coupleCode.isNotEmpty()) {
+                                    val clean = coupleCode.filter { it.isDigit() }
+                                    if (clean.length == 6) "커플 코드: ${clean.substring(0, 3)} - ${clean.substring(3, 6)}" else "커플 코드: $coupleCode"
+                                } else {
+                                    "6자리 코드로 1초 연결하기 >"
+                                }
                                 Text(
-                                    text = emailStr,
+                                    text = subText,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary,
+                                    color = if (coupleCode.isNotEmpty()) Income else Primary,
                                 )
                             }
                         }
@@ -290,10 +302,24 @@ fun MoreScreen(
                 OurListCard(containerColor = Surface) {
                     Column {
                         MoreMenuItem(
+                            icon = Icons.Filled.Favorite,
+                            iconTint = Primary,
+                            title = "커플 실시간 연동 (6자리 코드)",
+                            subtitle = if (coupleCode.isNotEmpty()) "연결됨: ${coupleCode.chunked(3).joinToString(" - ")}" else "6자리 코드로 1초 간편 연결",
+                            onClick = {
+                                haptics.tick()
+                                onNavigate(AppRoutes.COUPLE_CONNECT)
+                            },
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = Divider,
+                        )
+                        MoreMenuItem(
                             icon = Icons.Filled.Cloud,
                             iconTint = Review,
-                            title = "Google 계정 및 공유 Drive",
-                            subtitle = if (sharedFolderId.isNotEmpty()) "연결됨: $sharedFolderId" else "공유 폴더 설정 필요",
+                            title = "Google 계정 및 공유 Drive (선택)",
+                            subtitle = if (sharedFolderId.isNotEmpty()) "연결됨: $sharedFolderId" else "공유 폴더 설정",
                             onClick = {
                                 haptics.tick()
                                 onNavigate(AppRoutes.DRIVE_SETUP)

@@ -25,7 +25,7 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] APK 복사 및 무결성 검증...
-set "VER=v1.0.2"
+set "VER=v1.0.3"
 set "SRC_APK=%~dp0app\build\outputs\apk\debug\app-debug.apk"
 set "DEST_APK=%~dp0OurList-%VER%-debug.apk"
 set "GDRIVE_DEV=G:\내 드라이브\03_앱개발\ourlist"

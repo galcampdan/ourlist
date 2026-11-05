@@ -77,5 +77,6 @@ object AppRoutes {
     const val TRASH = "trash"
     const val BACKUP = "backup"
     const val DRIVE_SETUP = "drive_setup"
+    const val COUPLE_CONNECT = "couple_connect"
     const val EXPORT = "export"
 }

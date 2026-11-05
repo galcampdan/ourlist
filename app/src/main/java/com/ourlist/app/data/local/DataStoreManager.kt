@@ -40,6 +40,8 @@ class DataStoreManager(private val context: Context) {
         val LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
         val BACKUP_RECOVERY_CODE = stringPreferencesKey("backup_recovery_code")
         val GOOGLE_AUTH_TOKEN = stringPreferencesKey("google_auth_token")
+        val COUPLE_CODE = stringPreferencesKey("couple_code")
+        val FIREBASE_RTDB_URL = stringPreferencesKey("firebase_rtdb_url")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -75,6 +77,10 @@ class DataStoreManager(private val context: Context) {
     val partnerNameFlow: Flow<String> = context.dataStore.data.map { it[Keys.PARTNER_NAME] ?: "상대방" }
 
     val sharedFolderIdFlow: Flow<String> = context.dataStore.data.map { it[Keys.SHARED_FOLDER_ID] ?: "" }
+    val coupleCodeFlow: Flow<String> = context.dataStore.data.map { it[Keys.COUPLE_CODE] ?: "" }
+    val firebaseRtdbUrlFlow: Flow<String> = context.dataStore.data.map {
+        it[Keys.FIREBASE_RTDB_URL] ?: "https://ourlist-4462e-default-rtdb.firebaseio.com"
+    }
 
     val viewModeFlow: Flow<ViewMode> = context.dataStore.data.map {
         val name = it[Keys.VIEW_MODE] ?: ViewMode.LIST.name
@@ -134,6 +140,14 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun setSharedFolderId(folderId: String) {
         context.dataStore.edit { it[Keys.SHARED_FOLDER_ID] = folderId }
+    }
+
+    suspend fun setCoupleCode(code: String) {
+        context.dataStore.edit { it[Keys.COUPLE_CODE] = code }
+    }
+
+    suspend fun setFirebaseRtdbUrl(url: String) {
+        context.dataStore.edit { it[Keys.FIREBASE_RTDB_URL] = url }
     }
 
     suspend fun setViewMode(mode: ViewMode) {

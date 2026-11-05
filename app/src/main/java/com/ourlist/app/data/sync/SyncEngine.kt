@@ -38,7 +38,8 @@ class SyncEngine(
     private val dataStoreManager: DataStoreManager,
     private val notificationRepository: NotificationRepository,
     private val reminderScheduler: ReminderScheduler,
-    private val driveClient: DriveSyncClient
+    private val driveClient: DriveSyncClient,
+    private val coupleClient: CoupleSyncClient? = null
 ) {
     private val bucketDao = db.bucketDao()
     private val syncDao = db.syncOperationDao()
@@ -53,81 +54,159 @@ class SyncEngine(
         syncMutex.withLock {
             _syncState.value = SyncState.Syncing
             try {
-                val folderId = dataStoreManager.sharedFolderIdFlow.first()
-                if (folderId.isEmpty()) {
-                    _syncState.value = SyncState.Idle
-                    return@withContext SyncState.Idle
+                val coupleCode = dataStoreManager.coupleCodeFlow.first().trim()
+                if (coupleCode.isNotEmpty() && coupleClient != null) {
+                    val result = syncViaCoupleCode(coupleCode)
+                    _syncState.value = result
+                    return@withContext result
                 }
 
-                val myDeviceId = dataStoreManager.getOrCreateDeviceId()
-                val mySub = dataStoreManager.userSubFlow.first()
-
-                // Step 1: Ensure directory structure in Drive
-                val rootFiles = driveClient.listFilesInFolder(folderId)
-                var opsFolderId = rootFiles.firstOrNull { it.name == "operations" && it.mimeType == "application/vnd.google-apps.folder" }?.id
-                if (opsFolderId == null) {
-                    opsFolderId = driveClient.createFolder("operations", folderId)
+                val folderId = dataStoreManager.sharedFolderIdFlow.first().trim()
+                if (folderId.isNotEmpty()) {
+                    val result = syncViaDrive(folderId)
+                    _syncState.value = result
+                    return@withContext result
                 }
 
-                var sharedOpsFolderId: String? = null
-                var heartOpsFolderId: String? = null
-                if (opsFolderId != null) {
-                    val opFolders = driveClient.listFilesInFolder(opsFolderId)
-                    sharedOpsFolderId = opFolders.firstOrNull { it.name == "shared" }?.id
-                        ?: driveClient.createFolder("shared", opsFolderId)
-                    heartOpsFolderId = opFolders.firstOrNull { it.name == "heart" }?.id
-                        ?: driveClient.createFolder("heart", opsFolderId)
-                }
-
-                var processedRemoteCount = 0
-
-                // Step 2: Download & Apply Remote Operations for SHARED & HEART
-                if (sharedOpsFolderId != null) {
-                    processedRemoteCount += processRemoteOperations(sharedOpsFolderId, myDeviceId, mySub)
-                }
-                if (heartOpsFolderId != null) {
-                    processedRemoteCount += processRemoteOperations(heartOpsFolderId, myDeviceId, mySub)
-                }
-
-                // Step 3: Upload Local Pending Operations
-                val pending = syncDao.getPendingOperations()
-                for (entity in pending) {
-                    val targetFolderId = if (entity.collection == BucketCollection.SHARED.name) {
-                        sharedOpsFolderId
-                    } else {
-                        heartOpsFolderId
-                    }
-                    if (targetFolderId != null) {
-                        val op = entity.toDomain()
-                        val fileName = "${op.opId}.json"
-                        val content = json.encodeToString(op)
-                        driveClient.uploadFile(targetFolderId, fileName, content)
-                        syncDao.markUploaded(op.opId)
-                    }
-                }
-
-                // Step 4: Update Snapshots for fast cold recovery
-                updateRemoteSnapshots(folderId)
-
-                // Step 5: Housekeeping - Purge trash older than 30 days
-                bucketDao.purgeTrashOlderThan(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000L)
-
-                val now = System.currentTimeMillis()
-                dataStoreManager.setLastSyncTime(now)
-
-                val unresolvedConflicts = conflictDao.getUnresolvedConflicts().size
-                val result = SyncState.Success(
-                    syncedCount = processedRemoteCount + pending.size,
-                    conflictCount = unresolvedConflicts
-                )
-                _syncState.value = result
-                result
+                _syncState.value = SyncState.Idle
+                SyncState.Idle
             } catch (e: Exception) {
                 val error = SyncState.Error(e.message ?: "동기화 중 오류가 발생했습니다.")
                 _syncState.value = error
                 error
             }
         }
+    }
+
+    private suspend fun syncViaCoupleCode(coupleCode: String): SyncState {
+        val client = coupleClient ?: return SyncState.Idle
+        val myDeviceId = dataStoreManager.getOrCreateDeviceId()
+        val mySub = dataStoreManager.userSubFlow.first()
+
+        var processedRemoteCount = 0
+
+        // Step 1: Download & Apply Remote Operations
+        val remoteOps = client.fetchOperations(coupleCode)
+        for (remoteOp in remoteOps) {
+            if (syncDao.exists(remoteOp.opId)) continue
+
+            // Skip own operations
+            if (remoteOp.deviceId == myDeviceId || (mySub.isNotEmpty() && remoteOp.actorSub == mySub)) {
+                syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
+                continue
+            }
+
+            applyRemoteOperation(remoteOp)
+            syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
+            processedRemoteCount++
+        }
+
+        // Step 2: Upload Local Pending Operations
+        val pending = syncDao.getPendingOperations()
+        for (entity in pending) {
+            val op = entity.toDomain()
+            val ok = client.pushOperation(coupleCode, op)
+            if (ok) {
+                syncDao.markUploaded(op.opId)
+            }
+        }
+
+        // Step 3: Check cold start snapshot recovery
+        val localShared = bucketDao.getAllInCollection(BucketCollection.SHARED.name)
+        val localHeart = bucketDao.getAllInCollection(BucketCollection.HEART.name)
+        if (localShared.isEmpty() && localHeart.isEmpty() && processedRemoteCount == 0 && pending.isEmpty()) {
+            val remoteState = client.fetchState(coupleCode)
+            if (remoteState != null) {
+                for (item in remoteState.shared) {
+                    bucketDao.upsert(BucketItemEntity.fromDomain(item))
+                }
+                for (item in remoteState.heart) {
+                    bucketDao.upsert(BucketItemEntity.fromDomain(item))
+                }
+                processedRemoteCount += remoteState.shared.size + remoteState.heart.size
+            }
+        }
+
+        // Step 4: Update Snapshots for partner cold start
+        val sharedItems = bucketDao.getAllInCollection(BucketCollection.SHARED.name).map { it.toDomain() }
+        val heartItems = bucketDao.getAllInCollection(BucketCollection.HEART.name).map { it.toDomain() }
+        client.pushState(coupleCode, myDeviceId, sharedItems, heartItems)
+
+        // Step 5: Housekeeping - Purge trash older than 30 days
+        bucketDao.purgeTrashOlderThan(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000L)
+
+        val now = System.currentTimeMillis()
+        dataStoreManager.setLastSyncTime(now)
+
+        val unresolvedConflicts = conflictDao.getUnresolvedConflicts().size
+        return SyncState.Success(
+            syncedCount = processedRemoteCount + pending.size,
+            conflictCount = unresolvedConflicts
+        )
+    }
+
+    private suspend fun syncViaDrive(folderId: String): SyncState {
+        val myDeviceId = dataStoreManager.getOrCreateDeviceId()
+        val mySub = dataStoreManager.userSubFlow.first()
+
+        // Step 1: Ensure directory structure in Drive
+        val rootFiles = driveClient.listFilesInFolder(folderId)
+        var opsFolderId = rootFiles.firstOrNull { it.name == "operations" && it.mimeType == "application/vnd.google-apps.folder" }?.id
+        if (opsFolderId == null) {
+            opsFolderId = driveClient.createFolder("operations", folderId)
+        }
+
+        var sharedOpsFolderId: String? = null
+        var heartOpsFolderId: String? = null
+        if (opsFolderId != null) {
+            val opFolders = driveClient.listFilesInFolder(opsFolderId)
+            sharedOpsFolderId = opFolders.firstOrNull { it.name == "shared" }?.id
+                ?: driveClient.createFolder("shared", opsFolderId)
+            heartOpsFolderId = opFolders.firstOrNull { it.name == "heart" }?.id
+                ?: driveClient.createFolder("heart", opsFolderId)
+        }
+
+        var processedRemoteCount = 0
+
+        // Step 2: Download & Apply Remote Operations for SHARED & HEART
+        if (sharedOpsFolderId != null) {
+            processedRemoteCount += processRemoteOperations(sharedOpsFolderId, myDeviceId, mySub)
+        }
+        if (heartOpsFolderId != null) {
+            processedRemoteCount += processRemoteOperations(heartOpsFolderId, myDeviceId, mySub)
+        }
+
+        // Step 3: Upload Local Pending Operations
+        val pending = syncDao.getPendingOperations()
+        for (entity in pending) {
+            val targetFolderId = if (entity.collection == BucketCollection.SHARED.name) {
+                sharedOpsFolderId
+            } else {
+                heartOpsFolderId
+            }
+            if (targetFolderId != null) {
+                val op = entity.toDomain()
+                val fileName = "${op.opId}.json"
+                val content = json.encodeToString(op)
+                driveClient.uploadFile(targetFolderId, fileName, content)
+                syncDao.markUploaded(op.opId)
+            }
+        }
+
+        // Step 4: Update Snapshots for fast cold recovery
+        updateRemoteSnapshots(folderId)
+
+        // Step 5: Housekeeping - Purge trash older than 30 days
+        bucketDao.purgeTrashOlderThan(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000L)
+
+        val now = System.currentTimeMillis()
+        dataStoreManager.setLastSyncTime(now)
+
+        val unresolvedConflicts = conflictDao.getUnresolvedConflicts().size
+        return SyncState.Success(
+            syncedCount = processedRemoteCount + pending.size,
+            conflictCount = unresolvedConflicts
+        )
     }
 
     private suspend fun processRemoteOperations(

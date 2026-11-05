@@ -34,6 +34,7 @@ import com.ourlist.app.ui.screens.heart.HeartScreen
 import com.ourlist.app.ui.screens.memories.MemoriesScreen
 import com.ourlist.app.ui.screens.memories.MemoriesViewModel
 import com.ourlist.app.ui.screens.more.BackupScreen
+import com.ourlist.app.ui.screens.more.CoupleConnectScreen
 import com.ourlist.app.ui.screens.more.DriveSetupScreen
 import com.ourlist.app.ui.screens.more.MoreScreen
 import com.ourlist.app.ui.screens.more.PersonalScreen
@@ -174,6 +175,17 @@ fun AppNavGraph(
             DriveSetupScreen(
                 dataStoreManager = app.dataStoreManager,
                 driveClient = app.driveClient,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // 7.5 Couple Connect Screen (6-digit PIN Realtime Sync)
+        composable(AppRoutes.COUPLE_CONNECT) {
+            CoupleConnectScreen(
+                dataStoreManager = app.dataStoreManager,
+                coupleClient = app.coupleClient,
+                syncEngine = app.syncEngine,
+                bucketRepository = app.bucketRepository,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

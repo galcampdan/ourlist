@@ -420,4 +420,12 @@ class BucketRepository(
             syncDao.insert(SyncOperationEntity.fromDomain(createOp))
         }
     }
+
+    suspend fun getAllInCollectionDirect(collection: BucketCollection): List<BucketItem> {
+        return bucketDao.getAllInCollection(collection.name).map { it.toDomain() }
+    }
+
+    suspend fun upsertItemDirect(item: BucketItem) {
+        bucketDao.upsert(BucketItemEntity.fromDomain(item))
+    }
 }
