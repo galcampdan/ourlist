@@ -22,7 +22,10 @@ data class RoomMeta(
     val userAName: String = "나",
     val deviceB: String = "",
     val userBName: String = "상대방"
-)
+) {
+    val isBothConnected: Boolean
+        get() = deviceA.isNotBlank() && deviceB.isNotBlank() && deviceA != deviceB
+}
 
 @Serializable
 data class RoomStateData(
@@ -139,6 +142,10 @@ class CoupleSyncClient(
         // 1. Check meta
         val meta = fetchMeta(roomCode)
             ?: throw IOException("존재하지 않는 커플 코드입니다. 코드를 다시 확인해주세요.")
+
+        if (meta.deviceA == myDeviceId) {
+            throw IOException("내가 개설한 커플 코드입니다. 상대방 스마트폰에서 입력해주세요.")
+        }
 
         // 2. Patch deviceB info
         val patchObj = JSONObject().apply {

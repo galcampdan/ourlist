@@ -108,6 +108,7 @@ fun MoreScreen(
     val syncState by syncEngine.syncState.collectAsState()
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
+    val isPartnerConnected by dataStoreManager.isPartnerConnectedFlow.collectAsState(initial = false)
     val userEmail by dataStoreManager.userEmailFlow.collectAsState(initial = "")
     val sharedFolderId by dataStoreManager.sharedFolderIdFlow.collectAsState(initial = "")
 
@@ -190,39 +191,62 @@ fun MoreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
+                        val isConnected = coupleCode.isNotEmpty() && isPartnerConnected
+                        val isWaiting = coupleCode.isNotEmpty() && !isPartnerConnected
+
+                        val statusColor = when {
+                            isConnected -> Income
+                            isWaiting -> Review
+                            else -> Primary
+                        }
+                        val statusIcon = when {
+                            isConnected -> Icons.Filled.Favorite
+                            else -> Icons.Filled.Sync
+                        }
+                        val statusTitle = when {
+                            isConnected -> "커플 실시간 연동 (연결됨)"
+                            isWaiting -> "커플 실시간 연동 (대기 중)"
+                            else -> "커플 실시간 연동 (미연결)"
+                        }
+                        val subText = when {
+                            isConnected -> {
+                                val clean = coupleCode.filter { it.isDigit() }
+                                if (clean.length == 6) "🟢 연결됨: ${clean.substring(0, 3)} - ${clean.substring(3, 6)}" else "🟢 연결됨: $coupleCode"
+                            }
+                            isWaiting -> {
+                                val clean = coupleCode.filter { it.isDigit() }
+                                if (clean.length == 6) "🟡 상대방 연결 대기 중 (${clean.substring(0, 3)} - ${clean.substring(3, 6)})" else "🟡 상대방 연결 대기 중"
+                            }
+                            else -> "6자리 코드로 1초 연결하기 >"
+                        }
+
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(CircleShape)
-                                    .background(if (coupleCode.isNotEmpty()) Income.copy(alpha = 0.15f) else Primary.copy(alpha = 0.15f)),
+                                    .background(statusColor.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    imageVector = if (coupleCode.isNotEmpty()) Icons.Filled.Favorite else Icons.Filled.Sync,
+                                    imageVector = statusIcon,
                                     contentDescription = null,
-                                    tint = if (coupleCode.isNotEmpty()) Income else Primary,
+                                    tint = statusColor,
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
                             Spacer(Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = if (coupleCode.isNotEmpty()) "커플 실시간 연동 (연결됨)" else "커플 실시간 연동 (미연결)",
+                                    text = statusTitle,
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary,
                                 )
-                                val subText = if (coupleCode.isNotEmpty()) {
-                                    val clean = coupleCode.filter { it.isDigit() }
-                                    if (clean.length == 6) "커플 코드: ${clean.substring(0, 3)} - ${clean.substring(3, 6)}" else "커플 코드: $coupleCode"
-                                } else {
-                                    "6자리 코드로 1초 연결하기 >"
-                                }
                                 Text(
                                     text = subText,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (coupleCode.isNotEmpty()) Income else Primary,
+                                    color = statusColor,
                                 )
                             }
                         }
@@ -339,9 +363,17 @@ fun MoreScreen(
                     Column {
                         MoreMenuItem(
                             icon = Icons.Filled.Favorite,
-                            iconTint = Primary,
+                            iconTint = when {
+                                coupleCode.isNotEmpty() && isPartnerConnected -> Income
+                                coupleCode.isNotEmpty() -> Review
+                                else -> Primary
+                            },
                             title = "커플 실시간 연동 (6자리 코드)",
-                            subtitle = if (coupleCode.isNotEmpty()) "연결됨: ${coupleCode.chunked(3).joinToString(" - ")}" else "6자리 코드로 1초 간편 연결",
+                            subtitle = when {
+                                coupleCode.isEmpty() -> "6자리 코드로 1초 간편 연결"
+                                !isPartnerConnected -> "대기 중: ${coupleCode.chunked(3).joinToString(" - ")} (상대방 미연결)"
+                                else -> "연결됨: ${coupleCode.chunked(3).joinToString(" - ")}"
+                            },
                             onClick = {
                                 haptics.tick()
                                 onNavigate(AppRoutes.COUPLE_CONNECT)
@@ -414,7 +446,7 @@ fun MoreScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Our List v1.0.4",
+                                text = "Our List v1.0.5",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary,

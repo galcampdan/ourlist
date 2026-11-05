@@ -170,4 +170,25 @@ class SyncConflictMergeTest {
         val duplicateInserted = seenOpIds.add(opId)
         assertFalse("중복 opId 수신 시 재처리가 차단되어야 함", duplicateInserted)
     }
+
+    @Test
+    fun testRoomMeta_isBothConnected_states() {
+        // 1. Only deviceA (creator created room, partner has not joined)
+        val waitingMeta = com.ourlist.app.data.sync.RoomMeta(
+            createdAt = 1000L,
+            deviceA = "device-uuid-1111",
+            userAName = "나",
+            deviceB = "",
+            userBName = ""
+        )
+        assertFalse("상대방(deviceB)이 없으면 연결 완료 상태가 아니어야 함 (대기 중)", waitingMeta.isBothConnected)
+
+        // 2. Self join attempt (deviceB identical to deviceA)
+        val selfJoinedMeta = waitingMeta.copy(deviceB = "device-uuid-1111")
+        assertFalse("동일 기기(deviceA == deviceB)는 연결 완료로 인정되지 않아야 함", selfJoinedMeta.isBothConnected)
+
+        // 3. Both devices properly connected
+        val connectedMeta = waitingMeta.copy(deviceB = "device-uuid-2222", userBName = "상대방")
+        assertTrue("서로 다른 두 기기가 모두 등록되면 연결 완료 상태여야 함", connectedMeta.isBothConnected)
+    }
 }

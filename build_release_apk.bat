@@ -41,7 +41,7 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] 릴리즈 산출물 확인 및 동기화...
-set "VER=v1.0.4"
+set "VER=v1.0.5"
 set "REL_APK=%~dp0app\build\outputs\apk\release\app-release.apk"
 set "DEST_APK=%~dp0OurList-%VER%-release.apk"
 set "GDRIVE_DEV=G:\내 드라이브\03_앱개발\ourlist"

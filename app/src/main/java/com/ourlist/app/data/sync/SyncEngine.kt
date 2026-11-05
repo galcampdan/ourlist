@@ -91,6 +91,14 @@ class SyncEngine(
         val myDeviceId = dataStoreManager.getOrCreateDeviceId()
         val mySub = dataStoreManager.userSubFlow.first()
 
+        // Verify partner connection state via room metadata
+        val meta = client.fetchMeta(coupleCode)
+        if (meta != null && meta.isBothConnected) {
+            dataStoreManager.setPartnerConnected(true)
+        } else {
+            dataStoreManager.setPartnerConnected(false)
+        }
+
         var processedRemoteCount = 0
 
         // Step 1: Download & Apply Remote Operations

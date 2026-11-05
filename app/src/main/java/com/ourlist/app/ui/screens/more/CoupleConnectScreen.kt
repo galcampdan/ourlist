@@ -88,12 +88,14 @@ import com.ourlist.app.ui.theme.Income
 import com.ourlist.app.ui.theme.Ink
 import com.ourlist.app.ui.theme.OurListDimens
 import com.ourlist.app.ui.theme.Primary
+import com.ourlist.app.ui.theme.Review
 import com.ourlist.app.ui.theme.Surface
 import com.ourlist.app.ui.theme.SurfaceRaised
 import com.ourlist.app.ui.theme.TextPrimary
 import com.ourlist.app.ui.theme.TextSecondary
 import com.ourlist.app.ui.theme.TextTertiary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -116,6 +118,7 @@ fun CoupleConnectScreen(
     val haptics = rememberHaptics()
 
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
+    val isPartnerConnected by dataStoreManager.isPartnerConnectedFlow.collectAsState(initial = false)
     val userName by dataStoreManager.userNameFlow.collectAsState(initial = "")
     val partnerName by dataStoreManager.partnerNameFlow.collectAsState(initial = "")
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
@@ -132,6 +135,32 @@ fun CoupleConnectScreen(
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var showAdvancedUrl by remember { mutableStateOf(false) }
     var inputFirebaseUrl by remember(firebaseUrl) { mutableStateOf(firebaseUrl) }
+
+    // Active polling to detect when partner joins
+    LaunchedEffect(coupleCode) {
+        if (coupleCode.isBlank()) return@LaunchedEffect
+        while (true) {
+            try {
+                val meta = coupleClient.fetchMeta(coupleCode)
+                if (meta != null) {
+                    val both = meta.isBothConnected
+                    val prev = dataStoreManager.isPartnerConnectedFlow.first()
+                    if (both != prev) {
+                        dataStoreManager.setPartnerConnected(both)
+                        if (both) {
+                            withContext(Dispatchers.Main) {
+                                haptics.confirm()
+                                Toast.makeText(context, "🎉 상대방과 실시간 연결이 완료되었습니다!", Toast.LENGTH_LONG).show()
+                            }
+                            syncEngine.sync()
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+            }
+            delay(2500)
+        }
+    }
 
     fun formatCode(code: String): String {
         val clean = code.filter { it.isDigit() }
@@ -189,175 +218,292 @@ fun CoupleConnectScreen(
         }
 
         if (coupleCode.isNotBlank()) {
-            // ==========================================
-            // STATUS: ALREADY CONNECTED
-            // ==========================================
-
-            // 2. Connection Status Card
-            item {
-                OurListCard(containerColor = Surface) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(Income.copy(alpha = 0.15f))
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
+            if (!isPartnerConnected) {
+                // ==========================================
+                // STATUS: WAITING FOR PARTNER
+                // ==========================================
+                item {
+                    OurListCard(containerColor = Surface) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Box(
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Income)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "실시간 연동 중",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Income
-                            )
-                        }
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Review.copy(alpha = 0.15f))
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(10.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Review
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "상대방 연결 대기 중",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Review
+                                )
+                            }
 
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "우리 둘만의 커플 코드",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = formatCode(coupleCode),
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    letterSpacing = 4.sp,
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                fontWeight = FontWeight.Bold,
-                                color = Primary
-                            )
-                        }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "우리 둘만의 커플 코드",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = formatCode(coupleCode),
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        letterSpacing = 6.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    fontWeight = FontWeight.Bold,
+                                    color = Primary
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = "상대방 스마트폰의 [코드 입력하기] 탭에\n위 6자리 숫자를 입력하면 자동으로 연결됩니다.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 18.sp
+                                )
+                            }
 
-                        // Copy & Share Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                            // Copy & Share Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        haptics.tick()
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("OurList Couple Code", coupleCode))
+                                        Toast.makeText(context, "커플 코드가 복사되었습니다: $coupleCode", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SurfaceRaised, contentColor = TextPrimary),
+                                    border = BorderStroke(1.dp, Divider),
+                                ) {
+                                    Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("코드 복사", fontWeight = FontWeight.Bold)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        haptics.tick()
+                                        val sendIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱의 [커플 실시간 연동]에서 이 코드를 입력하면 즉시 연결됩니다!")
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "커플 코드 공유"))
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
+                                ) {
+                                    Icon(imageVector = Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("카톡 공유", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            // Cancel waiting button
                             OutlinedButton(
                                 onClick = {
                                     haptics.tick()
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("OurList Couple Code", coupleCode))
-                                    Toast.makeText(context, "커플 코드가 복사되었습니다: $coupleCode", Toast.LENGTH_SHORT).show()
+                                    showDisconnectDialog = true
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.dp, Divider),
                             ) {
-                                Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondary)
-                                Spacer(Modifier.width(6.dp))
-                                Text("코드 복사", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    haptics.tick()
-                                    val sendIntent = Intent().apply {
-                                        action = Intent.ACTION_SEND
-                                        putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱에서 이 코드를 입력하면 즉시 연결됩니다!")
-                                        type = "text/plain"
-                                    }
-                                    context.startActivity(Intent.createChooser(sendIntent, "커플 코드 공유"))
-                                },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, Divider),
-                            ) {
-                                Icon(imageVector = Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondary)
-                                Spacer(Modifier.width(6.dp))
-                                Text("공유하기", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                                Text("대기 취소하고 다른 코드 입력하기", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
                             }
                         }
-
-                        // Last Sync Info
-                        val lastSyncStr = if (lastSyncTime > 0) {
-                            SimpleDateFormat("yyyy.MM.dd a h:mm:ss", Locale.KOREA).format(Date(lastSyncTime))
-                        } else "아직 동기화 전"
-
-                        Text(
-                            text = "최근 동기화: $lastSyncStr",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextTertiary
-                        )
                     }
                 }
-            }
+            } else {
+                // ==========================================
+                // STATUS: ALREADY CONNECTED
+                // ==========================================
 
-            // 3. Actions Card: Sync Now & Disconnect
-            item {
-                OurListCard(containerColor = Surface) {
-                    Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            text = "동기화 관리",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-
-                        Text(
-                            text = "버킷리스트를 추가, 수정, 완료, 삭제할 때마다 백그라운드에서 실시간으로 자동 동기화됩니다.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            lineHeight = 18.sp
-                        )
-
-                        Button(
-                            onClick = {
-                                haptics.confirm()
-                                coroutineScope.launch {
-                                    val result = syncEngine.sync()
-                                    when (result) {
-                                        is SyncState.Success -> {
-                                            Toast.makeText(context, "동기화 완료! (${result.syncedCount}개 항목 반영)", Toast.LENGTH_SHORT).show()
-                                        }
-                                        is SyncState.Error -> {
-                                            Toast.makeText(context, "동기화 오류: ${result.message}", Toast.LENGTH_LONG).show()
-                                        }
-                                        else -> {}
-                                    }
-                                }
-                            },
-                            enabled = syncState !is SyncState.Syncing,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
+                // 2. Connection Status Card
+                item {
+                    OurListCard(containerColor = Surface) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            if (syncState is SyncState.Syncing) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Ink)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Income.copy(alpha = 0.15f))
+                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Income)
+                                )
                                 Spacer(Modifier.width(8.dp))
-                                Text("동기화 중…", fontWeight = FontWeight.Bold)
-                            } else {
-                                Icon(imageVector = Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("지금 즉시 동기화", fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "상대방과 실시간 연결됨",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Income
+                                )
                             }
-                        }
 
-                        OutlinedButton(
-                            onClick = {
-                                haptics.tick()
-                                showDisconnectDialog = true
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, Danger.copy(alpha = 0.5f)),
-                        ) {
-                            Icon(imageVector = Icons.Filled.LinkOff, contentDescription = null, tint = Danger, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("연결 해제하기", color = Danger, fontWeight = FontWeight.Bold)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "우리 둘만의 커플 코드",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = formatCode(coupleCode),
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        letterSpacing = 4.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    fontWeight = FontWeight.Bold,
+                                    color = Primary
+                                )
+                            }
+
+                            // Copy & Share Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        haptics.tick()
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        clipboard.setPrimaryClip(ClipData.newPlainText("OurList Couple Code", coupleCode))
+                                        Toast.makeText(context, "커플 코드가 복사되었습니다: $coupleCode", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, Divider),
+                                ) {
+                                    Icon(imageVector = Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondary)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("코드 복사", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        haptics.tick()
+                                        val sendIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱에서 이 코드를 입력하면 즉시 연결됩니다!")
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(sendIntent, "커플 코드 공유"))
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, Divider),
+                                ) {
+                                    Icon(imageVector = Icons.Filled.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = TextSecondary)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("공유하기", color = TextSecondary, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+
+                            // Last Sync Info
+                            val lastSyncStr = if (lastSyncTime > 0) {
+                                SimpleDateFormat("yyyy.MM.dd a h:mm:ss", Locale.KOREA).format(Date(lastSyncTime))
+                            } else "아직 동기화 전"
+
+                            Text(
+                                text = "최근 동기화: $lastSyncStr",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary
+                            )
+                        }
+                    }
+                }
+
+                // 3. Actions Card: Sync Now & Disconnect
+                item {
+                    OurListCard(containerColor = Surface) {
+                        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                text = "동기화 관리",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+
+                            Text(
+                                text = "버킷리스트를 추가, 수정, 완료, 삭제할 때마다 백그라운드에서 실시간으로 자동 동기화됩니다.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                lineHeight = 18.sp
+                            )
+
+                            Button(
+                                onClick = {
+                                    haptics.confirm()
+                                    coroutineScope.launch {
+                                        val result = syncEngine.sync()
+                                        when (result) {
+                                            is SyncState.Success -> {
+                                                Toast.makeText(context, "동기화 완료! (${result.syncedCount}개 항목 반영)", Toast.LENGTH_SHORT).show()
+                                            }
+                                            is SyncState.Error -> {
+                                                Toast.makeText(context, "동기화 오류: ${result.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                            else -> {}
+                                        }
+                                    }
+                                },
+                                enabled = syncState !is SyncState.Syncing,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
+                            ) {
+                                if (syncState is SyncState.Syncing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Ink)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("동기화 중…", fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(imageVector = Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("지금 즉시 동기화", fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    haptics.tick()
+                                    showDisconnectDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Danger.copy(alpha = 0.5f)),
+                            ) {
+                                Icon(imageVector = Icons.Filled.LinkOff, contentDescription = null, tint = Danger, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("연결 해제하기", color = Danger, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -559,6 +705,7 @@ fun CoupleConnectScreen(
                                                 )
 
                                                 dataStoreManager.setCoupleCode(randomCode)
+                                                dataStoreManager.setPartnerConnected(false)
                                                 dataStoreManager.setLastSyncTime(System.currentTimeMillis())
                                                 generatedCodeDisplay = randomCode
 
@@ -746,6 +893,7 @@ fun CoupleConnectScreen(
                                             }
 
                                             dataStoreManager.setCoupleCode(clean)
+                                            dataStoreManager.setPartnerConnected(true)
                                             dataStoreManager.setLastSyncTime(System.currentTimeMillis())
 
                                             // Trigger initial full sync
@@ -850,11 +998,18 @@ fun CoupleConnectScreen(
         AlertDialog(
             onDismissRequest = { showDisconnectDialog = false },
             title = {
-                Text("커플 연동 해제", color = TextPrimary, fontWeight = FontWeight.Bold)
+                Text(
+                    text = if (isPartnerConnected) "커플 연동 해제" else "연결 대기 취소",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
             },
             text = {
                 Text(
-                    "현재 연결된 커플 코드를 해제하시겠습니까?\n\n내 폰에 저장된 기존 버킷리스트 데이터는 그대로 유지되며, 이후 작성되는 내용은 더 이상 상대방과 공유되지 않습니다.",
+                    text = if (isPartnerConnected)
+                        "현재 연결된 커플 코드를 해제하시겠습니까?\n\n내 폰에 저장된 기존 버킷리스트 데이터는 그대로 유지되며, 이후 작성되는 내용은 더 이상 상대방과 공유되지 않습니다."
+                    else
+                        "커플 코드 대기를 취소하시겠습니까?\n취소 후 다른 코드를 입력하거나 새 코드를 발급받을 수 있습니다.",
                     color = TextSecondary,
                     lineHeight = 20.sp
                 )
@@ -865,13 +1020,15 @@ fun CoupleConnectScreen(
                         haptics.confirm()
                         coroutineScope.launch {
                             dataStoreManager.setCoupleCode("")
+                            dataStoreManager.setPartnerConnected(false)
+                            generatedCodeDisplay = ""
                             showDisconnectDialog = false
-                            Toast.makeText(context, "커플 연동이 해제되었습니다.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isPartnerConnected) "커플 연동이 해제되었습니다." else "대기가 취소되었습니다.", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Ink)
                 ) {
-                    Text("해제하기", fontWeight = FontWeight.Bold)
+                    Text(if (isPartnerConnected) "해제하기" else "대기 취소", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
