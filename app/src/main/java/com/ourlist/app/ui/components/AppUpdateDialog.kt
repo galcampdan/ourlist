@@ -294,16 +294,18 @@ fun AppUpdateDialog(
                 }
                 UpdateUiState.ERROR -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = {
-                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.apkUrl))
-                                context.startActivity(browserIntent)
-                            },
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(imageVector = Icons.Filled.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("브라우저 열기")
+                        if (updateInfo.apkUrl.isNotBlank()) {
+                            OutlinedButton(
+                                onClick = {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.apkUrl))
+                                    context.startActivity(browserIntent)
+                                },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(imageVector = Icons.Filled.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("브라우저 열기")
+                            }
                         }
                         Button(
                             onClick = { startDownload() },

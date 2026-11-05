@@ -65,6 +65,10 @@ class AppUpdateManager(
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         try {
+            if (apkUrl.isBlank()) {
+                return@withContext Result.failure(IOException("다운로드 주소가 설정되지 않았습니다."))
+            }
+
             val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
             val targetFile = File(updatesDir, targetFileName)
             if (targetFile.exists()) targetFile.delete()
