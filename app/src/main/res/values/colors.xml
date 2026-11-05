@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icon background matching deep obsidian plum ink -->
+    <color name="launcher_background">#24202B</color>
+    <!-- Root window background matching Compose Ink surface -->
+    <color name="window_background">#0F1115</color>
+    <!-- Notification accent matching Primary Rose Coral -->
+    <color name="notification_accent">#FF5376</color>
+</resources>

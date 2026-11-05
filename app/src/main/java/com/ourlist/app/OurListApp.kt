@@ -63,7 +63,27 @@ class OurListApp : Application() {
         ReminderScheduler.createNotificationChannel(this)
 
         driveClient = DriveSyncClient {
-            dataStoreManager.googleAuthTokenFlow.first().ifBlank { null }
+            val savedToken = dataStoreManager.googleAuthTokenFlow.first().ifBlank { null }
+            if (savedToken != null) {
+                savedToken
+            } else {
+                val account = com.google.android.gms.auth.api.signin.GoogleSignIn.getLastSignedInAccount(this@OurListApp)
+                if (account?.account != null) {
+                    try {
+                        val freshToken = com.google.android.gms.auth.GoogleAuthUtil.getToken(
+                            this@OurListApp,
+                            account.account!!,
+                            "oauth2:https://www.googleapis.com/auth/drive.file"
+                        )
+                        dataStoreManager.setGoogleAuthToken(freshToken)
+                        freshToken
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else {
+                    null
+                }
+            }
         }
 
         notificationRepository = NotificationRepository(database)
@@ -83,6 +103,15 @@ class OurListApp : Application() {
             dataStoreManager = dataStoreManager,
             driveClient = driveClient
         )
+
+        // Auto-sync whenever there are local changes ("변동이 있을 때")
+        scope.launch(Dispatchers.IO) {
+            database.syncOperationDao().getPendingOperationsFlow().collect { pending ->
+                if (pending.isNotEmpty()) {
+                    syncEngine.sync()
+                }
+            }
+        }
 
         // Initialize persistent device ID & run startup maintenance
         scope.launch(Dispatchers.IO) {

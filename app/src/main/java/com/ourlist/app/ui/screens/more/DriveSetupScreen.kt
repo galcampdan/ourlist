@@ -1,6 +1,9 @@
 package com.ourlist.app.ui.screens.more
 
+import android.app.Activity
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,17 +18,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FolderShared
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,6 +54,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
 import com.ourlist.app.data.local.DataStoreManager
 import com.ourlist.app.data.sync.DriveSyncClient
 import com.ourlist.app.ui.components.HomeHeader
@@ -66,7 +76,34 @@ import com.ourlist.app.ui.theme.SurfaceRaised
 import com.ourlist.app.ui.theme.TextPrimary
 import com.ourlist.app.ui.theme.TextSecondary
 import com.ourlist.app.ui.theme.TextTertiary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * Extracts Google Drive Folder ID from raw ID or full Google Drive URL.
+ * Supports:
+ * - https://drive.google.com/drive/folders/{id}
+ * - https://drive.google.com/drive/u/0/folders/{id}
+ * - https://drive.google.com/open?id={id}
+ * - raw folder ID (e.g. 1jTbU5HI34WskGcDoITJlGq4P81sDjbh_)
+ */
+fun extractGoogleDriveFolderId(input: String): String {
+    val trimmed = input.trim()
+    if (trimmed.isBlank()) return ""
+    val folderRegex = Regex("""/folders/([a-zA-Z0-9_-]+)""")
+    val match = folderRegex.find(trimmed)
+    if (match != null) {
+        return match.groupValues[1]
+    }
+    val idParamRegex = Regex("""[?&]id=([a-zA-Z0-9_-]+)""")
+    val idMatch = idParamRegex.find(trimmed)
+    if (idMatch != null) {
+        return idMatch.groupValues[1]
+    }
+    return if (!trimmed.contains("/")) trimmed else trimmed
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,23 +119,72 @@ fun DriveSetupScreen(
 
     val currentFolderId by dataStoreManager.sharedFolderIdFlow.collectAsState(initial = "")
     val userEmail by dataStoreManager.userEmailFlow.collectAsState(initial = "")
-    val userName by dataStoreManager.userNameFlow.collectAsState(initial = "")
-    val partnerEmail by dataStoreManager.partnerEmailFlow.collectAsState(initial = "")
-    val partnerName by dataStoreManager.partnerNameFlow.collectAsState(initial = "")
     val googleAuthToken by dataStoreManager.googleAuthTokenFlow.collectAsState(initial = "")
 
-    var inputFolderId by remember(currentFolderId) { mutableStateOf(currentFolderId) }
-    var inputUserEmail by remember(userEmail) { mutableStateOf(userEmail) }
-    var inputUserName by remember(userName) { mutableStateOf(userName) }
-    var inputPartnerEmail by remember(partnerEmail) { mutableStateOf(partnerEmail) }
-    var inputPartnerName by remember(partnerName) { mutableStateOf(partnerName) }
+    var inputFolderText by remember(currentFolderId) { mutableStateOf(currentFolderId) }
+    val extractedFolderId = remember(inputFolderText) { extractGoogleDriveFolderId(inputFolderText) }
+
     var inputAuthToken by remember(googleAuthToken) { mutableStateOf(googleAuthToken) }
+    var isSigningIn by remember { mutableStateOf(false) }
     var isTestingConnection by remember { mutableStateOf(false) }
+    var showManualToken by remember { mutableStateOf(false) }
+
+    // Google Sign-In Client configuration
+    val googleSignInClient = remember {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestScopes(
+                Scope("https://www.googleapis.com/auth/drive.file"),
+                Scope("https://www.googleapis.com/auth/drive")
+            )
+            .build()
+        GoogleSignIn.getClient(context, gso)
+    }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        isSigningIn = false
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                if (account != null) {
+                    coroutineScope.launch(Dispatchers.IO) {
+                        try {
+                            val token = GoogleAuthUtil.getToken(
+                                context,
+                                account.account ?: return@launch,
+                                "oauth2:https://www.googleapis.com/auth/drive.file"
+                            )
+                            dataStoreManager.setGoogleAuthToken(token)
+                            dataStoreManager.setUserInfo(
+                                sub = account.id ?: "",
+                                email = account.email ?: "",
+                                name = account.displayName ?: "나"
+                            )
+                            withContext(Dispatchers.Main) {
+                                haptics.confirm()
+                                Toast.makeText(context, "${account.email} 로그인 및 Drive 권한 연결 완료!", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            withContext(Dispatchers.Main) {
+                                Toast.makeText(context, "토큰 발급 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }
+            } catch (e: ApiException) {
+                Toast.makeText(context, "Google 로그인 실패: ${e.statusCode} ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Ink),
+            .background(Ink)
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = OurListDimens.ScreenPadding,
             top = 16.dp,
@@ -125,7 +211,7 @@ fun DriveSetupScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "뒤로가기",
                         tint = TextPrimary,
                         modifier = Modifier.size(20.dp),
@@ -134,16 +220,16 @@ fun DriveSetupScreen(
                 Spacer(Modifier.width(12.dp))
                 HomeHeader(
                     title = "Google Drive 연동",
-                    subtitle = "서버 없는 2인 P2P 동기화",
+                    subtitle = "서버 없는 2인 실시간 동기화",
                     accentColor = Primary,
                 )
             }
         }
 
-        // 2. Guide Intro Card
+        // 2. Google Account Authentication Card
         item {
             OurListCard(containerColor = Surface) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -152,134 +238,78 @@ fun DriveSetupScreen(
                                 .background(Primary.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(imageVector = Icons.Filled.FolderShared, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+                            Icon(imageVector = Icons.Filled.AccountCircle, contentDescription = null, tint = Primary, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "커플 2인 동기화 안내", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Google 계정 로그인", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "별도의 운영 서버 없이 두 사람의 Google Drive를 직접 연결합니다.\n\n" +
-                                "1단계: 한 사람이 Google Drive에 'OurList' 폴더를 생성합니다.\n" +
-                                "2단계: 폴더 공유에서 상대방 Google 계정에 '편집자(writer)' 권한을 부여합니다.\n" +
-                                "3단계: 두 사람 모두 해당 폴더 ID를 아래에 입력하고 저장합니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                    )
-                }
-            }
-        }
 
-        // 3. My Profile Section
-        item {
-            OurListCard(containerColor = Surface) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                    if (userEmail.isNotBlank()) {
+                        Row(
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Primary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SurfaceRaised)
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(imageVector = Icons.Filled.Person, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+                            Icon(imageVector = Icons.Filled.CheckCircle, contentDescription = null, tint = Income, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = userEmail, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Google Drive 접근 권한 연결됨", style = MaterialTheme.typography.labelSmall, color = Income)
+                            }
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "내 계정 정보", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+
+                        OutlinedButton(
+                            onClick = {
+                                isSigningIn = true
+                                haptics.tick()
+                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Divider),
+                        ) {
+                            Text("다른 Google 계정으로 전환", color = TextSecondary)
+                        }
+                    } else {
+                        Text(
+                            text = "앱에서 Google Drive 공유 폴더를 읽고 쓰기 위해 본인의 Google 계정으로 로그인해주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                        )
+
+                        Button(
+                            onClick = {
+                                isSigningIn = true
+                                haptics.confirm()
+                                googleSignInLauncher.launch(googleSignInClient.signInIntent)
+                            },
+                            enabled = !isSigningIn,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
+                        ) {
+                            if (isSigningIn) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Ink)
+                                Spacer(Modifier.width(8.dp))
+                                Text("로그인 연결 중…", fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(imageVector = Icons.Filled.AccountCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Google 계정으로 로그인", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
-                    OutlinedTextField(
-                        value = inputUserName,
-                        onValueChange = { inputUserName = it },
-                        placeholder = { Text("내 닉네임 (표시 이름)", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = inputUserEmail,
-                        onValueChange = { inputUserEmail = it },
-                        placeholder = { Text("내 Google 이메일", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
                 }
             }
         }
 
-        // 4. Partner Profile Section
+        // 3. Shared Folder Setup Card (Accepts URL or Folder ID)
         item {
             OurListCard(containerColor = Surface) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Review.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(imageVector = Icons.Filled.Group, contentDescription = null, tint = Review, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "상대방 정보", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                    OutlinedTextField(
-                        value = inputPartnerName,
-                        onValueChange = { inputPartnerName = it },
-                        placeholder = { Text("상대방 닉네임", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Review,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = inputPartnerEmail,
-                        onValueChange = { inputPartnerEmail = it },
-                        placeholder = { Text("상대방 Google 이메일", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Review,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
-                }
-            }
-        }
-
-        // 5. Folder ID & Token Section
-        item {
-            OurListCard(containerColor = Surface) {
-                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -288,42 +318,25 @@ fun DriveSetupScreen(
                                 .background(Due.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(imageVector = Icons.Filled.Cloud, contentDescription = null, tint = Due, modifier = Modifier.size(18.dp))
+                            Icon(imageVector = Icons.Filled.FolderShared, contentDescription = null, tint = Due, modifier = Modifier.size(18.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "공유 폴더 및 인증 설정", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "공유 폴더 주소 (링크)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
                     }
-                    OutlinedTextField(
-                        value = inputFolderId,
-                        onValueChange = { inputFolderId = it },
-                        placeholder = { Text("Google Drive 공유 폴더 ID (예: 1A2b3C_4D...)", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Due,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
+
                     Text(
-                        text = "Google Drive 웹에서 해당 폴더를 열었을 때 주소창 url의 /folders/ 뒤에 오는 문자열입니다.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
+                        text = "Google Drive에서 두 사람이 공유한 폴더의 전체 웹 주소 링크(URL) 또는 폴더 ID를 그대로 붙여넣으세요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
                     )
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
                     OutlinedTextField(
-                        value = inputAuthToken,
-                        onValueChange = { inputAuthToken = it },
-                        placeholder = { Text("Google OAuth Access Token (선택/테스트용)", color = TextTertiary) },
+                        value = inputFolderText,
+                        onValueChange = { inputFolderText = it },
+                        placeholder = { Text("예: https://drive.google.com/drive/folders/1A2b3C... 또는 폴더 ID", color = TextTertiary) },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
-                        maxLines = 4,
+                        minLines = 1,
+                        maxLines = 3,
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = SurfaceRaised,
@@ -335,23 +348,45 @@ fun DriveSetupScreen(
                         ),
                     )
 
+                    if (extractedFolderId.isNotBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(SurfaceRaised)
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(imageVector = Icons.Filled.Check, contentDescription = null, tint = Income, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "인식된 폴더 ID: $extractedFolderId",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Income,
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
 
+                    // Test Connection Button
                     OutlinedButton(
                         onClick = {
-                            if (inputFolderId.isBlank()) {
-                                Toast.makeText(context, "폴더 ID를 먼저 입력해주세요.", Toast.LENGTH_SHORT).show()
+                            if (extractedFolderId.isBlank()) {
+                                Toast.makeText(context, "공유 폴더 링크 또는 ID를 먼저 입력해주세요.", Toast.LENGTH_SHORT).show()
                                 return@OutlinedButton
                             }
                             isTestingConnection = true
                             haptics.tick()
                             coroutineScope.launch {
-                                dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
+                                if (inputAuthToken.isNotBlank()) {
+                                    dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
+                                }
                                 try {
-                                    val files = driveClient.listFilesInFolder(inputFolderId.trim())
-                                    Toast.makeText(context, "Google Drive 연결 성공! 폴더 내 ${files.size}개 파일 확인됨.", Toast.LENGTH_LONG).show()
+                                    val files = driveClient.listFilesInFolder(extractedFolderId)
+                                    Toast.makeText(context, "연결 성공! 공유 폴더 내 ${files.size}개 파일 확인됨.", Toast.LENGTH_LONG).show()
                                 } catch (e: Exception) {
-                                    Toast.makeText(context, "Google Drive 연결 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, "연결 실패: ${e.message}", Toast.LENGTH_LONG).show()
                                 } finally {
                                     isTestingConnection = false
                                 }
@@ -365,34 +400,91 @@ fun DriveSetupScreen(
                         if (isTestingConnection) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Primary)
                             Spacer(Modifier.width(8.dp))
-                            Text("연결 확인 중…", color = TextSecondary)
+                            Text("Google Drive 연결 확인 중…", color = TextSecondary)
                         } else {
-                            Text("Google Drive API 연결 테스트", color = TextPrimary)
+                            Text("Google Drive 연결 상태 테스트", color = TextPrimary)
                         }
                     }
                 }
             }
         }
 
-        // 6. Save Button
+        // 4. Sync Condition Card ("변동이 있을 때 자동 동기화")
+        item {
+            OurListCard(containerColor = Surface) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Income.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(imageVector = Icons.Filled.Sync, contentDescription = null, tint = Income, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(text = "동기화 조건: 변동 시 자동 동기화", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    }
+                    Text(
+                        text = "버킷리스트의 추가, 수정, 완료, 순서 변경, 삭제 등 데이터 변동이 발생할 때마다 앱이 백그라운드에서 Google Drive 공유 폴더로 즉시 변경 사항을 전송하고 동기화합니다.\n\n또한 앱 시작 시 및 상단 동기화 버튼을 눌러 언제든 즉시 동기화할 수 있습니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
+            }
+        }
+
+        // 5. Advanced / Manual Token Section (Toggleable)
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = if (showManualToken) "▼ 수동 인증 토큰 설정 접기" else "▶ 고급: OAuth Access Token 직접 입력 (테스트용)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary,
+                    modifier = Modifier
+                        .clickable { showManualToken = !showManualToken }
+                        .padding(vertical = 4.dp),
+                )
+                if (showManualToken) {
+                    Spacer(Modifier.height(8.dp))
+                    OurListCard(containerColor = Surface) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = inputAuthToken,
+                                onValueChange = { inputAuthToken = it },
+                                placeholder = { Text("Bearer OAuth Access Token", color = TextTertiary) },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                maxLines = 4,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = SurfaceRaised,
+                                    unfocusedContainerColor = SurfaceRaised,
+                                    focusedBorderColor = Primary,
+                                    unfocusedBorderColor = Divider,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. Save Settings Button
         item {
             Button(
                 onClick = {
                     haptics.confirm()
+                    val targetId = extractedFolderId.ifBlank { inputFolderText.trim() }
                     coroutineScope.launch {
-                        dataStoreManager.setUserInfo(
-                            sub = inputUserEmail,
-                            email = inputUserEmail.trim(),
-                            name = inputUserName.trim().ifEmpty { "나" }
-                        )
-                        dataStoreManager.setPartnerInfo(
-                            sub = inputPartnerEmail,
-                            email = inputPartnerEmail.trim(),
-                            name = inputPartnerName.trim().ifEmpty { "상대방" }
-                        )
-                        dataStoreManager.setSharedFolderId(inputFolderId.trim())
-                        dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
-                        Toast.makeText(context, "공유 및 인증 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
+                        dataStoreManager.setSharedFolderId(targetId)
+                        if (inputAuthToken.isNotBlank()) {
+                            dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
+                        }
+                        Toast.makeText(context, "Google Drive 연동 설정이 저장되었습니다.", Toast.LENGTH_SHORT).show()
                         onNavigateBack()
                     }
                 },
@@ -402,7 +494,7 @@ fun DriveSetupScreen(
             ) {
                 Icon(imageVector = Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("설정 저장 및 연결", fontWeight = FontWeight.Bold)
+                Text("설정 저장 및 연동 완료", fontWeight = FontWeight.Bold)
             }
         }
     }

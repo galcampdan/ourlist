@@ -63,6 +63,12 @@ class MemoriesViewModel(
         }
     }
 
+    fun updateCompletedAt(itemId: String, newCompletedAt: Long) {
+        viewModelScope.launch {
+            bucketRepository.updateCompletedAt(itemId, newCompletedAt)
+        }
+    }
+
     class Factory(private val bucketRepository: BucketRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

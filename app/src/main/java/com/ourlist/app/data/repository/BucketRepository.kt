@@ -33,6 +33,12 @@ class BucketRepository(
         }
     }
 
+    fun getAllActiveInCollection(collection: BucketCollection): Flow<List<BucketItem>> {
+        return bucketDao.getAllActiveInCollection(collection.name).map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
     fun getMemories(): Flow<List<BucketItem>> {
         return bucketDao.getMemories().map { list ->
             list.map { it.toDomain() }
@@ -229,6 +235,39 @@ class BucketRepository(
                 actorName = userName,
                 itemId = item.id,
                 kind = OpKind.UNCOMPLETE,
+                createdAt = now,
+                deviceSequence = seq
+            )
+            syncDao.insert(SyncOperationEntity.fromDomain(op))
+        }
+    }
+
+    suspend fun updateCompletedAt(itemId: String, newCompletedAt: Long) {
+        val item = getItemById(itemId) ?: return
+        val now = System.currentTimeMillis()
+        val updatedItem = item.copy(
+            completedAt = newCompletedAt,
+            updatedAt = now
+        )
+        bucketDao.upsert(BucketItemEntity.fromDomain(updatedItem))
+
+        if (item.collection == BucketCollection.SHARED || item.collection == BucketCollection.HEART) {
+            val deviceId = dataStoreManager.getOrCreateDeviceId()
+            val userSub = dataStoreManager.userSubFlow.first()
+            val userName = dataStoreManager.userNameFlow.first()
+            val seq = dataStoreManager.getNextDeviceSequence()
+
+            val op = SyncOperation(
+                opId = UUID.randomUUID().toString(),
+                collection = item.collection,
+                deviceId = deviceId,
+                actorSub = userSub,
+                actorName = userName,
+                itemId = item.id,
+                kind = OpKind.UPDATE_FIELD,
+                fieldPath = "completedAt",
+                fieldValueJson = newCompletedAt.toString(),
+                itemSnapshotJson = json.encodeToString(updatedItem),
                 createdAt = now,
                 deviceSequence = seq
             )

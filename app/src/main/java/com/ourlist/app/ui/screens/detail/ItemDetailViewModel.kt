@@ -63,6 +63,8 @@ class ItemDetailViewModel(
         }
     }
 
+    private var isSaving = false
+
     fun saveItem(
         title: String,
         wishType: WishType,
@@ -73,11 +75,13 @@ class ItemDetailViewModel(
         memo: String?,
         isReminderOn: Boolean
     ): Boolean {
+        if (isSaving) return false
         // Validation: Title required, SPECIFIC_DATE requires targetDate
         if (title.isBlank()) return false
         if (wishType == WishType.SPECIFIC_DATE && targetDate.isNullOrBlank()) return false
 
         val currentSuccess = _uiState.value as? DetailUiState.Success ?: return false
+        isSaving = true
         val original = currentSuccess.item
 
         val isNew = itemId.isNullOrEmpty() || itemId == "new"

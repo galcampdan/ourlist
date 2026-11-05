@@ -5,8 +5,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 enum class WishType(val label: String) {
     MUST_DO("꼭 하고 싶다"),
-    SOMEDAY("언젠간 하고 싶다"),
-    SPECIFIC_DATE("구체적인 날에 하고 싶다")
+    SOMEDAY("언젠간"),
+    SPECIFIC_DATE("특정 날짜")
+}
+
+enum class SortDirection {
+    ASC,
+    DESC
 }
 
 @Serializable

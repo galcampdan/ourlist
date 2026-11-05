@@ -145,6 +145,12 @@ class DataStoreManager(private val context: Context) {
         }
     }
 
+    suspend fun setManualRanks(ranks: Map<String, Int>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.MANUAL_RANKS_JSON] = json.encodeToString(ranks)
+        }
+    }
+
     suspend fun setItemReminderEnabled(itemId: String, enabled: Boolean) {
         context.dataStore.edit { prefs ->
             val raw = prefs[Keys.REMINDER_ENABLED_JSON] ?: "{}"

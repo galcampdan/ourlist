@@ -3,6 +3,7 @@ package com.ourlist.app.ui.screens.notifications
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,17 +15,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,7 +43,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.ourlist.app.data.model.InAppNotification
 import com.ourlist.app.ui.components.EmptyStateCard
-import com.ourlist.app.ui.components.HomeHeader
 import com.ourlist.app.ui.components.OurListCard
 import com.ourlist.app.ui.components.StatusPill
 import com.ourlist.app.ui.rememberHaptics
@@ -64,6 +67,7 @@ import java.util.Locale
 fun NotificationsScreen(
     viewModel: NotificationsViewModel,
     onNavigateToDetail: (String) -> Unit,
+    onNavigateBack: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val notifications by viewModel.notifications.collectAsState()
@@ -73,68 +77,103 @@ fun NotificationsScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Ink),
+            .background(Ink)
+            .statusBarsPadding(),
         contentPadding = PaddingValues(
             start = OurListDimens.ScreenPadding,
             top = 16.dp,
             end = OurListDimens.ScreenPadding,
-            bottom = 20.dp,
+            bottom = 24.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // 1. Header
+        // 1. Header with back button
         item {
-            HomeHeader(
-                title = "상대방 소식",
-                subtitle = "실시간 공동 작업 알림",
-                accentColor = Primary,
-                actions = {
-                    if (unreadCount > 0) {
-                        TextButton(
-                            onClick = {
-                                haptics.confirm()
-                                viewModel.markAllAsRead()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(OurListDimens.MinTouchTarget)
+                            .clip(CircleShape)
+                            .background(SurfaceRaised)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                haptics.tick()
+                                onNavigateBack()
                             },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.DoneAll,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = Primary,
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "모두 읽음",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Primary,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "뒤로가기",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
-                },
-            )
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "상대방 소식",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                        )
+                        Text(
+                            text = "실시간 공동 작업 알림",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextSecondary,
+                        )
+                    }
+                }
+
+                if (unreadCount > 0) {
+                    TextButton(
+                        onClick = {
+                            haptics.confirm()
+                            viewModel.markAllAsRead()
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.DoneAll,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = Primary,
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "모두 읽음",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Primary,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
         }
 
         // 2. Notifications List
         if (notifications.isEmpty()) {
             item {
                 EmptyStateCard(
-                    title = "아직 상대방의 새로운 소식이 없어요",
-                    description = "상대방이 버킷리스트를 추가하거나 완료, 수정하면 여기에 실시간으로 기록됩니다.",
+                    title = "아직 새로운 알림이 없어요",
+                    description = "상대방이 공동 버킷리스트를 추가, 수정, 완료하면 이곳에 실시간으로 기록됩니다.",
                 )
             }
         } else {
-            items(notifications, key = { it.id }) { item ->
-                NotificationItemCard(
-                    item = item,
+            items(notifications, key = { it.id }) { notification ->
+                NotificationItemRow(
+                    notification = notification,
                     onClick = {
-                        haptics.tick()
-                        viewModel.markAsRead(item.id)
-                        onNavigateToDetail(item.itemId)
-                    },
-                    onDelete = {
-                        haptics.tick()
-                        viewModel.deleteNotification(item.id)
+                        viewModel.markAsRead(notification.id)
+                        if (notification.itemId.isNotBlank()) {
+                            onNavigateToDetail(notification.itemId)
+                        }
                     },
                 )
             }
@@ -143,46 +182,50 @@ fun NotificationsScreen(
 }
 
 @Composable
-fun NotificationItemCard(
-    item: InAppNotification,
+private fun NotificationItemRow(
+    notification: InAppNotification,
     onClick: () -> Unit,
-    onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val (icon, tint) = when (item.actionType) {
-        "CREATE" -> Icons.Filled.PlaylistAdd to Primary
-        "COMPLETE" -> Icons.Filled.Celebration to Income
-        "DELETE" -> Icons.Filled.Delete to Danger
-        else -> Icons.Filled.Edit to Due
+    val haptics = rememberHaptics()
+    val isUnread = !notification.isRead
+
+    val (icon, iconColor, kindText) = when (notification.actionType) {
+        "ADD" -> Triple(Icons.AutoMirrored.Filled.PlaylistAdd, Primary, "새 항목")
+        "UPDATE" -> Triple(Icons.Filled.Edit, Due, "수정")
+        "COMPLETE" -> Triple(Icons.Filled.Celebration, Income, "완료 🎉")
+        "DELETE" -> Triple(Icons.Filled.Delete, Danger, "삭제")
+        else -> Triple(Icons.Filled.Edit, Review, "알림")
     }
 
-    val timeStr = formatRelativeTime(item.timestamp)
+    val timeStr = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date(notification.timestamp))
 
     OurListCard(
         modifier = modifier.fillMaxWidth(),
-        containerColor = if (!item.isRead) SurfaceRaised else Surface,
-        border = BorderStroke(
-            1.dp,
-            if (!item.isRead) Primary.copy(alpha = 0.4f) else Divider,
-        ),
-        onClick = onClick,
+        containerColor = if (isUnread) SurfaceRaised else Surface,
+        border = BorderStroke(1.dp, if (isUnread) iconColor.copy(alpha = 0.4f) else Divider),
+        onClick = {
+            haptics.tick()
+            onClick()
+        },
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            // Action Icon Pill
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(tint.copy(alpha = 0.15f)),
+                    .background(iconColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = tint,
+                    tint = iconColor,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -190,50 +233,40 @@ fun NotificationItemCard(
             Spacer(modifier = Modifier.width(14.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (!item.isRead) FontWeight.Bold else FontWeight.Normal,
-                    color = TextPrimary,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     StatusPill(
-                        text = item.collection.displayName,
-                        color = tint,
+                        text = "$kindText · ${notification.collection.displayName}",
+                        color = iconColor,
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = timeStr,
                         style = MaterialTheme.typography.labelSmall,
                         color = TextTertiary,
                     )
                 }
-            }
 
-            if (!item.isRead) {
-                Box(
-                    modifier = Modifier
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(Primary),
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = notification.itemTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
+                    color = TextPrimary,
                 )
+
+                if (notification.message.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = notification.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
             }
         }
-    }
-}
-
-fun formatRelativeTime(timestamp: Long): String {
-    val diff = System.currentTimeMillis() - timestamp
-    val minutes = diff / (60 * 1000)
-    val hours = diff / (60 * 60 * 1000)
-    val days = diff / (24 * 60 * 60 * 1000)
-
-    return when {
-        minutes < 1 -> "방금 전"
-        minutes < 60 -> "${minutes}분 전"
-        hours < 24 -> "${hours}시간 전"
-        days < 7 -> "${days}일 전"
-        else -> SimpleDateFormat("M월 d일", Locale.KOREA).format(Date(timestamp))
     }
 }

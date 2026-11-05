@@ -299,6 +299,7 @@ class SyncEngine(
                             placeText = mergedPlace,
                             memo = mergedMemo,
                             checklist = mergedChecklist,
+                            completedAt = remoteSnapshot.completedAt ?: localItem.completedAt,
                             updatedAt = System.currentTimeMillis()
                         )
                         bucketDao.upsert(BucketItemEntity.fromDomain(mergedItem))

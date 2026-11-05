@@ -145,7 +145,8 @@ class ReminderNotificationReceiver : BroadcastReceiver() {
         )
 
         val notification = NotificationCompat.Builder(context, ReminderScheduler.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setColor(context.getColor(R.color.notification_accent))
             .setContentTitle("[$itemTitle] $message")
             .setContentText(itemTitle)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

@@ -122,7 +122,7 @@ fun MoreScreen(
             start = OurListDimens.ScreenPadding,
             top = 16.dp,
             end = OurListDimens.ScreenPadding,
-            bottom = 20.dp,
+            bottom = 100.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

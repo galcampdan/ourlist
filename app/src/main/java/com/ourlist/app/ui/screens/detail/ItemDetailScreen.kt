@@ -1,21 +1,31 @@
 package com.ourlist.app.ui.screens.detail
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +42,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -44,6 +55,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,10 +65,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,12 +80,9 @@ import com.ourlist.app.data.model.BucketItem
 import com.ourlist.app.data.model.BucketStatus
 import com.ourlist.app.data.model.ChecklistItem
 import com.ourlist.app.data.model.WishType
-import com.ourlist.app.ui.components.HomeHeader
 import com.ourlist.app.ui.components.MoveItemDialog
 import com.ourlist.app.ui.components.OurListCard
 import com.ourlist.app.ui.components.OurListSwitch
-import com.ourlist.app.ui.components.SectionHeader
-import com.ourlist.app.ui.components.SegmentedControl
 import com.ourlist.app.ui.rememberHaptics
 import com.ourlist.app.ui.theme.Danger
 import com.ourlist.app.ui.theme.Divider
@@ -82,10 +93,14 @@ import com.ourlist.app.ui.theme.OurListDimens
 import com.ourlist.app.ui.theme.Primary
 import com.ourlist.app.ui.theme.Surface
 import com.ourlist.app.ui.theme.SurfaceRaised
-import com.ourlist.app.ui.theme.SurfaceSelected
+import com.ourlist.app.ui.theme.SurfaceSunken
 import com.ourlist.app.ui.theme.TextPrimary
 import com.ourlist.app.ui.theme.TextSecondary
 import com.ourlist.app.ui.theme.TextTertiary
+import com.ourlist.app.ui.theme.WishDateColor
+import com.ourlist.app.ui.theme.WishMustColor
+import com.ourlist.app.ui.theme.WishSomedayColor
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +112,7 @@ fun ItemDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val haptics = rememberHaptics()
 
     LaunchedEffect(uiState) {
         if (uiState is DetailUiState.Saved || uiState is DetailUiState.Deleted) {
@@ -120,6 +136,7 @@ fun ItemDetailScreen(
                 item = state.item,
                 initialReminderOn = state.isReminderOn,
                 onSave = { title, wishType, date, cost, place, checklist, memo, reminderOn ->
+                    val isNewItem = state.item.title.isEmpty()
                     val success = viewModel.saveItem(
                         title, wishType, date, cost, place, checklist, memo, reminderOn
                     )
@@ -129,7 +146,12 @@ fun ItemDetailScreen(
                             "제목은 필수이며, '구체적인 날에 하고 싶다'는 목표 날짜가 필수입니다.",
                             Toast.LENGTH_SHORT
                         ).show()
+                    } else {
+                        if (isNewItem) {
+                            haptics.confirm() // UI-12: 1-time subtle vibration on valid new item save
+                        }
                     }
+                    success
                 },
                 onComplete = { viewModel.completeItem() },
                 onUncomplete = { viewModel.uncompleteItem() },
@@ -144,11 +166,12 @@ fun ItemDetailScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ItemDetailContent(
     item: BucketItem,
     initialReminderOn: Boolean,
-    onSave: (String, WishType, String?, Long?, String?, List<ChecklistItem>, String?, Boolean) -> Unit,
+    onSave: (String, WishType, String?, Long?, String?, List<ChecklistItem>, String?, Boolean) -> Boolean,
     onComplete: () -> Unit,
     onUncomplete: () -> Unit,
     onDoAgain: (String?) -> Unit,
@@ -157,6 +180,10 @@ private fun ItemDetailContent(
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isNew = item.title.isEmpty()
+    val haptics = rememberHaptics()
+    val coroutineScope = rememberCoroutineScope()
+
     var title by remember { mutableStateOf(item.title) }
     var wishType by remember { mutableStateOf(item.wishType) }
     var targetDate by remember { mutableStateOf(item.targetDate ?: "") }
@@ -168,9 +195,98 @@ private fun ItemDetailContent(
     val checklistItems = remember { mutableStateListOf<ChecklistItem>().apply { addAll(item.checklist) } }
     var newChecklistText by remember { mutableStateOf("") }
     var showMoveDialog by remember { mutableStateOf(false) }
+    var showUnsavedDialog by remember { mutableStateOf(false) }
 
-    val haptics = rememberHaptics()
-    val isNew = item.title.isEmpty()
+    // BringIntoView requesters for UI-04 keyboard collision handling
+    val checklistBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val memoBringIntoViewRequester = remember { BringIntoViewRequester() }
+
+    // Dirty state tracking (UI-01)
+    val isDirty = remember(
+        title, wishType, targetDate, costText, placeText, memo, isReminderOn, checklistItems.size, checklistItems.toList()
+    ) {
+        if (isNew) {
+            title.isNotBlank() || targetDate.isNotBlank() || costText.isNotBlank() ||
+                    placeText.isNotBlank() || memo.isNotBlank() || checklistItems.isNotEmpty()
+        } else {
+            title != item.title ||
+                    wishType != item.wishType ||
+                    targetDate != (item.targetDate ?: "") ||
+                    costText != (item.estimatedCostKRW?.toString() ?: "") ||
+                    placeText != (item.placeText ?: "") ||
+                    memo != (item.memo ?: "") ||
+                    isReminderOn != initialReminderOn ||
+                    checklistItems.toList() != item.checklist
+        }
+    }
+
+    // System Back Handler (UI-01)
+    BackHandler(enabled = isDirty) {
+        showUnsavedDialog = true
+    }
+
+    // Unsaved Changes Confirmation Dialog (UI-01)
+    if (showUnsavedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedDialog = false },
+            containerColor = SurfaceRaised,
+            shape = RoundedCornerShape(OurListDimens.CardCorner),
+            title = {
+                Text(
+                    text = "변경사항이 저장되지 않았습니다",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                )
+            },
+            text = {
+                Text(
+                    text = "작성 중인 내용이 있습니다. 저장하지 않고 나가시겠습니까?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cost = costText.toLongOrNull()
+                        val success = onSave(
+                            title,
+                            wishType,
+                            targetDate.ifBlank { null },
+                            cost,
+                            placeText.ifBlank { null },
+                            checklistItems.toList(),
+                            memo.ifBlank { null },
+                            isReminderOn,
+                        )
+                        if (success) {
+                            showUnsavedDialog = false
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
+                ) {
+                    Text("저장", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showUnsavedDialog = false
+                            onNavigateBack()
+                        }
+                    ) {
+                        Text("저장하지 않고 나가기", color = Danger)
+                    }
+                    TextButton(onClick = { showUnsavedDialog = false }) {
+                        Text("계속 작성", color = TextSecondary)
+                    }
+                }
+            }
+        )
+    }
 
     if (showMoveDialog) {
         MoveItemDialog(
@@ -188,12 +304,14 @@ private fun ItemDetailContent(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Ink),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            .background(Ink)
+            .statusBarsPadding()
+            .imePadding(),
+        contentPadding = PaddingValues(
             start = OurListDimens.ScreenPadding,
             top = 16.dp,
             end = OurListDimens.ScreenPadding,
-            bottom = 24.dp,
+            bottom = 36.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -212,7 +330,11 @@ private fun ItemDetailContent(
                             .background(SurfaceRaised)
                             .clickable {
                                 haptics.tick()
-                                onNavigateBack()
+                                if (isDirty) {
+                                    showUnsavedDialog = true
+                                } else {
+                                    onNavigateBack()
+                                }
                             },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -235,7 +357,6 @@ private fun ItemDetailContent(
                 Button(
                     onClick = {
                         val cost = costText.toLongOrNull()
-                        haptics.confirm()
                         onSave(
                             title,
                             wishType,
@@ -286,7 +407,7 @@ private fun ItemDetailContent(
             }
         }
 
-        // 3. Wish Type Segmented Control
+        // 3. Wish Type Single-line Chips (UI-02: Prevent awkward word wrapping)
         item {
             OurListCard(containerColor = Surface) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -297,12 +418,49 @@ private fun ItemDetailContent(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Spacer(Modifier.height(10.dp))
-                    SegmentedControl(
-                        options = wishTypeOptions,
-                        selected = wishType,
-                        label = { it.label },
-                        onSelect = { wishType = it },
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        wishTypeOptions.forEach { type ->
+                            val isSelected = wishType == type
+                            val typeColor = when (type) {
+                                WishType.MUST_DO -> WishMustColor
+                                WishType.SOMEDAY -> WishSomedayColor
+                                WishType.SPECIFIC_DATE -> WishDateColor
+                            }
+                            MaterialSurface(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        haptics.tick()
+                                        wishType = type
+                                    },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSelected) typeColor.copy(alpha = 0.18f) else SurfaceSunken,
+                                border = BorderStroke(
+                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                    color = if (isSelected) typeColor else Divider,
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = type.label,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (isSelected) typeColor else TextSecondary,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -387,7 +545,7 @@ private fun ItemDetailContent(
             }
         }
 
-        // 5. Cost & Place
+        // 5. Responsive Place & Estimated Cost (UI-03: Stacks vertically if narrow <360dp)
         item {
             OurListCard(containerColor = Surface) {
                 Column(
@@ -401,66 +559,128 @@ private fun ItemDetailContent(
                         fontWeight = FontWeight.SemiBold,
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = placeText,
-                            onValueChange = { placeText = it },
-                            placeholder = { Text("장소 (예: 제주도)", color = TextTertiary) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.LocationOn,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = Primary,
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val isNarrow = maxWidth < 360.dp
+                        if (isNarrow) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = placeText,
+                                    onValueChange = { placeText = it },
+                                    label = { Text("장소", maxLines = 1, softWrap = false) },
+                                    placeholder = { Text("장소 (예: 제주도)", color = TextTertiary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.LocationOn,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Primary,
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = SurfaceRaised,
+                                        unfocusedContainerColor = SurfaceRaised,
+                                        focusedBorderColor = Primary,
+                                        unfocusedBorderColor = Divider,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                    ),
                                 )
-                            },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = SurfaceRaised,
-                                unfocusedContainerColor = SurfaceRaised,
-                                focusedBorderColor = Primary,
-                                unfocusedBorderColor = Divider,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary,
-                            ),
-                        )
 
-                        OutlinedTextField(
-                            value = costText,
-                            onValueChange = { costText = it.filter { ch -> ch.isDigit() } },
-                            placeholder = { Text("예상 비용 (원)", color = TextTertiary) },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Payments,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = Due,
+                                OutlinedTextField(
+                                    value = costText,
+                                    onValueChange = { costText = it.filter { ch -> ch.isDigit() } },
+                                    label = { Text("예상 비용", maxLines = 1, softWrap = false) },
+                                    placeholder = { Text("예상 비용 (원)", color = TextTertiary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Payments,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Due,
+                                        )
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = SurfaceRaised,
+                                        unfocusedContainerColor = SurfaceRaised,
+                                        focusedBorderColor = Primary,
+                                        unfocusedBorderColor = Divider,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                    ),
                                 )
-                            },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = SurfaceRaised,
-                                unfocusedContainerColor = SurfaceRaised,
-                                focusedBorderColor = Primary,
-                                unfocusedBorderColor = Divider,
-                                focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary,
-                            ),
-                        )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                OutlinedTextField(
+                                    value = placeText,
+                                    onValueChange = { placeText = it },
+                                    label = { Text("장소", maxLines = 1, softWrap = false) },
+                                    placeholder = { Text("장소 (예: 제주도)", color = TextTertiary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.LocationOn,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Primary,
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = SurfaceRaised,
+                                        unfocusedContainerColor = SurfaceRaised,
+                                        focusedBorderColor = Primary,
+                                        unfocusedBorderColor = Divider,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                    ),
+                                )
+
+                                OutlinedTextField(
+                                    value = costText,
+                                    onValueChange = { costText = it.filter { ch -> ch.isDigit() } },
+                                    label = { Text("예상 비용", maxLines = 1, softWrap = false) },
+                                    placeholder = { Text("예상 비용 (원)", color = TextTertiary) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Payments,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = Due,
+                                        )
+                                    },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = SurfaceRaised,
+                                        unfocusedContainerColor = SurfaceRaised,
+                                        focusedBorderColor = Primary,
+                                        unfocusedBorderColor = Divider,
+                                        focusedTextColor = TextPrimary,
+                                        unfocusedTextColor = TextPrimary,
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // 6. Checklist
+        // 6. Checklist (UI-04: BringIntoViewRequester on focus)
         item {
             OurListCard(containerColor = Surface) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -480,7 +700,14 @@ private fun ItemDetailContent(
                             value = newChecklistText,
                             onValueChange = { newChecklistText = it },
                             placeholder = { Text("준비물 추가 (예: 여권, 카메라)", color = TextTertiary) },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .bringIntoViewRequester(checklistBringIntoViewRequester)
+                                .onFocusChanged {
+                                    if (it.isFocused) {
+                                        coroutineScope.launch { checklistBringIntoViewRequester.bringIntoView() }
+                                    }
+                                },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
@@ -570,7 +797,7 @@ private fun ItemDetailContent(
             }
         }
 
-        // 7. Memo
+        // 7. Free Memo (UI-04: BringIntoViewRequester on focus)
         item {
             OurListCard(containerColor = Surface) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -587,7 +814,14 @@ private fun ItemDetailContent(
                         placeholder = { Text("두 사람만의 특별한 팁이나 계획 메모", color = TextTertiary) },
                         minLines = 3,
                         maxLines = 6,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .bringIntoViewRequester(memoBringIntoViewRequester)
+                            .onFocusChanged {
+                                if (it.isFocused) {
+                                    coroutineScope.launch { memoBringIntoViewRequester.bringIntoView() }
+                                }
+                            },
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = SurfaceRaised,

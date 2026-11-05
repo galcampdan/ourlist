@@ -14,6 +14,9 @@ interface BucketDao {
     @Query("SELECT * FROM bucket_items WHERE collection = :collection AND status = 'TODO' AND deletedAt IS NULL ORDER BY createdAt DESC")
     fun getTodoItems(collection: String): Flow<List<BucketItemEntity>>
 
+    @Query("SELECT * FROM bucket_items WHERE collection = :collection AND deletedAt IS NULL")
+    fun getAllActiveInCollection(collection: String): Flow<List<BucketItemEntity>>
+
     @Query("SELECT * FROM bucket_items WHERE status = 'DONE' AND deletedAt IS NULL AND collection != 'SECRET_LOCAL' ORDER BY completedAt DESC")
     fun getMemories(): Flow<List<BucketItemEntity>>
 

@@ -55,7 +55,7 @@ sealed class BottomNavTab(
     )
 
     companion object {
-        val items = listOf(Shared, Heart, Memories, Notifications, More)
+        val items = listOf(Shared, Heart, Memories, More)
     }
 }
 

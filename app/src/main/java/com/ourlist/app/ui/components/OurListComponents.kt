@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -42,6 +43,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface as MaterialSurface
+import androidx.compose.runtime.remember
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -104,16 +106,21 @@ fun OurListCard(
 ) {
     val shape = RoundedCornerShape(OurListDimens.CardCorner)
     val colors = CardDefaults.cardColors(containerColor = containerColor)
-    if (onClick == null) {
-        Card(modifier = modifier, shape = shape, colors = colors, border = border) { content() }
-    } else {
-        Card(
-            modifier = modifier,
-            shape = shape,
-            colors = colors,
-            border = border,
-            onClick = onClick,
-        ) { content() }
+    Card(
+        modifier = modifier.then(
+            if (onClick != null) {
+                Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null, // Removes the ugly gray highlight when pressed
+                    onClick = onClick,
+                )
+            } else Modifier
+        ),
+        shape = shape,
+        colors = colors,
+        border = border,
+    ) {
+        content()
     }
 }
 
@@ -169,6 +176,8 @@ fun StatusPill(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
