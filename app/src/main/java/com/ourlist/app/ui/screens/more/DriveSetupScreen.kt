@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FolderShared
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -54,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
@@ -119,10 +121,15 @@ fun DriveSetupScreen(
 
     val currentFolderId by dataStoreManager.sharedFolderIdFlow.collectAsState(initial = "")
     val userEmail by dataStoreManager.userEmailFlow.collectAsState(initial = "")
+    val userName by dataStoreManager.userNameFlow.collectAsState(initial = "")
+    val partnerName by dataStoreManager.partnerNameFlow.collectAsState(initial = "")
     val googleAuthToken by dataStoreManager.googleAuthTokenFlow.collectAsState(initial = "")
 
     var inputFolderText by remember(currentFolderId) { mutableStateOf(currentFolderId) }
     val extractedFolderId = remember(inputFolderText) { extractGoogleDriveFolderId(inputFolderText) }
+
+    var inputUserName by remember(userName) { mutableStateOf(userName) }
+    var inputPartnerName by remember(partnerName) { mutableStateOf(partnerName) }
 
     var inputAuthToken by remember(googleAuthToken) { mutableStateOf(googleAuthToken) }
     var isSigningIn by remember { mutableStateOf(false) }
@@ -223,6 +230,28 @@ fun DriveSetupScreen(
                     subtitle = "서버 없는 2인 실시간 동기화",
                     accentColor = Primary,
                 )
+            }
+        }
+
+        // 1.5 Architecture Guide Box
+        item {
+            OurListCard(containerColor = SurfaceRaised) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "💡 두 사람이 연결되는 원리",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Primary,
+                    )
+                    Text(
+                        text = "OurList는 중앙 서버 없이 Google Drive의 동일한 '공유 폴더'를 매개체로 두 기기가 1:1로 직접 연결됩니다.\n" +
+                                "1. 한 분이 Google Drive에서 폴더를 생성하고 상대방 구글 계정을 '편집자'로 초대합니다.\n" +
+                                "2. 두 분 모두 앱에서 동일한 '공유 폴더 주소'를 입력하고 본인 계정으로 로그인하면 자동으로 동기화됩니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        lineHeight = 18.sp,
+                    )
+                }
             }
         }
 
@@ -409,6 +438,70 @@ fun DriveSetupScreen(
             }
         }
 
+        // 3.5 Optional Nickname Card
+        item {
+            OurListCard(containerColor = Surface) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Primary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(imageVector = Icons.Filled.Person, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(text = "표시용 호칭 설정 (선택)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "버킷 카드 및 활동 기록에 표시될 이름입니다 (미입력 시 기본값 사용)", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = inputUserName,
+                            onValueChange = { inputUserName = it },
+                            label = { Text("내 호칭", color = TextTertiary) },
+                            placeholder = { Text("나", color = TextTertiary) },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = SurfaceRaised,
+                                unfocusedContainerColor = SurfaceRaised,
+                                focusedBorderColor = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                            ),
+                        )
+                        OutlinedTextField(
+                            value = inputPartnerName,
+                            onValueChange = { inputPartnerName = it },
+                            label = { Text("상대방 호칭", color = TextTertiary) },
+                            placeholder = { Text("상대방", color = TextTertiary) },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = SurfaceRaised,
+                                unfocusedContainerColor = SurfaceRaised,
+                                focusedBorderColor = Primary,
+                                unfocusedBorderColor = Divider,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+
         // 4. Sync Condition Card ("변동이 있을 때 자동 동기화")
         item {
             OurListCard(containerColor = Surface) {
@@ -481,6 +574,12 @@ fun DriveSetupScreen(
                     val targetId = extractedFolderId.ifBlank { inputFolderText.trim() }
                     coroutineScope.launch {
                         dataStoreManager.setSharedFolderId(targetId)
+                        if (inputUserName.isNotBlank()) {
+                            dataStoreManager.setUserName(inputUserName.trim())
+                        }
+                        if (inputPartnerName.isNotBlank()) {
+                            dataStoreManager.setPartnerName(inputPartnerName.trim())
+                        }
                         if (inputAuthToken.isNotBlank()) {
                             dataStoreManager.setGoogleAuthToken(inputAuthToken.trim())
                         }

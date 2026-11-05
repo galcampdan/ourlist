@@ -112,10 +112,22 @@ class DataStoreManager(private val context: Context) {
         }
     }
 
+    suspend fun setUserName(name: String) {
+        context.dataStore.edit {
+            it[Keys.USER_NAME] = name
+        }
+    }
+
     suspend fun setPartnerInfo(sub: String, email: String, name: String) {
         context.dataStore.edit {
             it[Keys.PARTNER_SUB] = sub
             it[Keys.PARTNER_EMAIL] = email
+            it[Keys.PARTNER_NAME] = name
+        }
+    }
+
+    suspend fun setPartnerName(name: String) {
+        context.dataStore.edit {
             it[Keys.PARTNER_NAME] = name
         }
     }

@@ -41,8 +41,9 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] 릴리즈 산출물 확인 및 동기화...
+set "VER=v1.0.2"
 set "REL_APK=%~dp0app\build\outputs\apk\release\app-release.apk"
-set "DEST_APK=%~dp0OurList-v1.0.1-release.apk"
+set "DEST_APK=%~dp0OurList-%VER%-release.apk"
 set "GDRIVE_DEV=G:\내 드라이브\03_앱개발\ourlist"
 
 if exist "%REL_APK%" (
@@ -50,7 +51,7 @@ if exist "%REL_APK%" (
     echo  - 릴리즈 APK 생성 완료: %DEST_APK%
     
     if exist "%GDRIVE_DEV%" (
-        copy /y "%REL_APK%" "%GDRIVE_DEV%\OurList-v1.0.1-release.apk" >nul
+        copy /y "%REL_APK%" "%GDRIVE_DEV%\OurList-%VER%-release.apk" >nul
         echo  - Google Drive (03_앱개발\ourlist) 동기화 완료!
     )
     

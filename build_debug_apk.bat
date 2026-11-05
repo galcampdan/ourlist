@@ -25,8 +25,9 @@ if errorlevel 1 (
 
 echo.
 echo [3/3] APK 복사 및 무결성 검증...
+set "VER=v1.0.2"
 set "SRC_APK=%~dp0app\build\outputs\apk\debug\app-debug.apk"
-set "DEST_APK=%~dp0OurList-v1.0.1-debug.apk"
+set "DEST_APK=%~dp0OurList-%VER%-debug.apk"
 set "GDRIVE_DEV=G:\내 드라이브\03_앱개발\ourlist"
 
 if exist "%SRC_APK%" (
@@ -34,7 +35,7 @@ if exist "%SRC_APK%" (
     echo  - 로컬 복사 완료: %DEST_APK%
     
     if exist "%GDRIVE_DEV%" (
-        copy /y "%SRC_APK%" "%GDRIVE_DEV%\OurList-v1.0.1-debug.apk" >nul
+        copy /y "%SRC_APK%" "%GDRIVE_DEV%\OurList-%VER%-debug.apk" >nul
         echo  - Google Drive (03_앱개발\ourlist) 동기화 완료!
     )
     
