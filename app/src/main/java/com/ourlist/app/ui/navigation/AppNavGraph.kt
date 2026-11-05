@@ -25,8 +25,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ourlist.app.OurListApp
+import com.ourlist.app.BuildConfig
 import com.ourlist.app.data.model.BucketCollection
+import com.ourlist.app.data.update.AppUpdateInfo
 import com.ourlist.app.ui.components.AppBottomBar
+import com.ourlist.app.ui.components.AppUpdateDialog
 import com.ourlist.app.ui.rememberHaptics
 import com.ourlist.app.ui.screens.detail.ItemDetailScreen
 import com.ourlist.app.ui.screens.detail.ItemDetailViewModel
@@ -272,6 +275,28 @@ fun MainTabsScreen(
             }
     }
 
+    // Startup automatic update check
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val res = app.appUpdateManager.checkForUpdate(BuildConfig.VERSION_CODE)
+        res.onSuccess { info ->
+            if (info != null) {
+                updateInfo = info
+                showUpdateDialog = true
+            }
+        }
+    }
+
+    if (showUpdateDialog && updateInfo != null) {
+        AppUpdateDialog(
+            updateInfo = updateInfo!!,
+            appUpdateManager = app.appUpdateManager,
+            onDismiss = { showUpdateDialog = false }
+        )
+    }
+
     // On tabs 1, 2, or 3, pressing system back returns to the first tab (Shared)
     BackHandler(enabled = pagerState.currentPage != 0) {
         coroutineScope.launch {
@@ -354,6 +379,8 @@ fun MainTabsScreen(
                         dataStoreManager = app.dataStoreManager,
                         syncEngine = app.syncEngine,
                         safBackupManager = app.safBackupManager,
+                        coupleClient = app.coupleClient,
+                        appUpdateManager = app.appUpdateManager,
                         db = app.database,
                         onNavigate = onNavigate
                     )

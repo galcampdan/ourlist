@@ -1,5 +1,6 @@
 package com.ourlist.app.ui.screens.more
 
+import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -24,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -36,6 +38,14 @@ import com.ourlist.app.data.backup.SafBackupManager
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SystemUpdate
+import com.ourlist.app.BuildConfig
+import com.ourlist.app.data.model.DDayCalculator
+import com.ourlist.app.data.sync.CoupleSyncClient
+import com.ourlist.app.data.update.AppUpdateInfo
+import com.ourlist.app.data.update.AppUpdateManager
+import com.ourlist.app.ui.components.AppUpdateDialog
+import java.time.LocalDate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -97,6 +107,8 @@ fun MoreScreen(
     dataStoreManager: DataStoreManager,
     syncEngine: SyncEngine,
     safBackupManager: SafBackupManager,
+    coupleClient: CoupleSyncClient,
+    appUpdateManager: AppUpdateManager,
     db: OurListDatabase,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -109,6 +121,7 @@ fun MoreScreen(
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
     val isPartnerConnected by dataStoreManager.isPartnerConnectedFlow.collectAsState(initial = false)
+    val datingStartDate by dataStoreManager.datingStartDateFlow.collectAsState(initial = "")
     val userEmail by dataStoreManager.userEmailFlow.collectAsState(initial = "")
     val sharedFolderId by dataStoreManager.sharedFolderIdFlow.collectAsState(initial = "")
 
@@ -117,6 +130,38 @@ fun MoreScreen(
     val lastSafBackupTime by dataStoreManager.lastSafBackupTimeFlow.collectAsState(initial = 0L)
     var showSafFolderDialog by remember { mutableStateOf(false) }
     var isBackingUpSaf by remember { mutableStateOf(false) }
+
+    var showDatingDateManageDialog by remember { mutableStateOf(false) }
+
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var availableUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+
+    fun showNativeDatePicker() {
+        val parts = datingStartDate.split("-")
+        val initYear = parts.getOrNull(0)?.toIntOrNull() ?: LocalDate.now().year
+        val initMonth = (parts.getOrNull(1)?.toIntOrNull() ?: LocalDate.now().monthValue) - 1
+        val initDay = parts.getOrNull(2)?.toIntOrNull() ?: LocalDate.now().dayOfMonth
+
+        val datePickerDialog = DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val formatted = "%04d-%02d-%02d".format(year, month + 1, dayOfMonth)
+                coroutineScope.launch {
+                    dataStoreManager.setDatingStartDate(formatted)
+                    if (coupleCode.isNotBlank()) {
+                        coupleClient.updateDatingStartDate(coupleCode, formatted)
+                    }
+                    val days = DDayCalculator.calculateDays(formatted)
+                    Toast.makeText(context, "사귄 날짜가 저장되었습니다! (함께한 지 ${days}일째 💕)", Toast.LENGTH_SHORT).show()
+                }
+            },
+            initYear,
+            initMonth,
+            initDay
+        )
+        datePickerDialog.show()
+    }
 
     val safFolderLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -384,6 +429,29 @@ fun MoreScreen(
                             color = Divider,
                         )
                         MoreMenuItem(
+                            icon = Icons.Filled.CalendarMonth,
+                            iconTint = Primary,
+                            title = "사귄 날짜 설정 (D-Day)",
+                            subtitle = if (datingStartDate.isNotBlank()) {
+                                val dDayStr = DDayCalculator.formatDDayText(datingStartDate) ?: ""
+                                "$datingStartDate ($dDayStr)"
+                            } else {
+                                "처음 만난 날을 등록하고 D-Day를 확인하세요"
+                            },
+                            onClick = {
+                                haptics.tick()
+                                if (datingStartDate.isNotBlank()) {
+                                    showDatingDateManageDialog = true
+                                } else {
+                                    showNativeDatePicker()
+                                }
+                            },
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = Divider,
+                        )
+                        MoreMenuItem(
                             icon = Icons.Filled.FolderShared,
                             iconTint = Income,
                             title = "Google Drive 폴더 자동 백업",
@@ -446,7 +514,7 @@ fun MoreScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Our List v1.0.5",
+                                text = "Our List v${BuildConfig.VERSION_NAME}",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary,
@@ -458,10 +526,113 @@ fun MoreScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                         )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = {
+                                haptics.tick()
+                                isCheckingUpdate = true
+                                coroutineScope.launch {
+                                    val res = appUpdateManager.checkForUpdate(BuildConfig.VERSION_CODE)
+                                    isCheckingUpdate = false
+                                    res.onSuccess { info ->
+                                        if (info != null) {
+                                            availableUpdateInfo = info
+                                            showUpdateDialog = true
+                                        } else {
+                                            Toast.makeText(context, "현재 최신 버전(v${BuildConfig.VERSION_NAME})을 사용 중입니다! 🎉", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }.onFailure {
+                                        Toast.makeText(context, "업데이트 확인 실패: ${it.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            enabled = !isCheckingUpdate,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceRaised, contentColor = Primary),
+                            border = BorderStroke(1.dp, Primary.copy(alpha = 0.35f))
+                        ) {
+                            if (isCheckingUpdate) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("최신 버전 확인 중…", fontWeight = FontWeight.Bold)
+                            } else {
+                                Icon(imageVector = Icons.Filled.SystemUpdate, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("🔄 최신 버전 확인", fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    if (showDatingDateManageDialog) {
+        val days = DDayCalculator.calculateDays(datingStartDate)
+        AlertDialog(
+            onDismissRequest = { showDatingDateManageDialog = false },
+            title = {
+                Text("사귄 날짜 관리", color = TextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "현재 설정된 날짜: $datingStartDate",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "우리 함께한 지 ${days ?: 0}일째 💕",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDatingDateManageDialog = false
+                        showNativeDatePicker()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink)
+                ) {
+                    Text("날짜 변경", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                dataStoreManager.setDatingStartDate("")
+                                if (coupleCode.isNotBlank()) {
+                                    coupleClient.updateDatingStartDate(coupleCode, "")
+                                }
+                                showDatingDateManageDialog = false
+                                Toast.makeText(context, "사귄 날짜가 삭제되었습니다.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    ) {
+                        Text("삭제", color = Danger)
+                    }
+                    TextButton(onClick = { showDatingDateManageDialog = false }) {
+                        Text("닫기", color = TextSecondary)
+                    }
+                }
+            },
+            containerColor = Surface,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+
+    if (showUpdateDialog && availableUpdateInfo != null) {
+        AppUpdateDialog(
+            updateInfo = availableUpdateInfo!!,
+            appUpdateManager = appUpdateManager,
+            onDismiss = { showUpdateDialog = false }
+        )
     }
 
     if (showSafFolderDialog) {

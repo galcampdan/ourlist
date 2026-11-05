@@ -99,6 +99,15 @@ class SyncEngine(
             dataStoreManager.setPartnerConnected(false)
         }
 
+        if (meta != null) {
+            val localDatingDate = dataStoreManager.datingStartDateFlow.first()
+            if (meta.datingStartDate.isNotBlank() && meta.datingStartDate != localDatingDate) {
+                dataStoreManager.setDatingStartDate(meta.datingStartDate)
+            } else if (meta.datingStartDate.isBlank() && localDatingDate.isNotBlank()) {
+                client.updateDatingStartDate(coupleCode, localDatingDate)
+            }
+        }
+
         var processedRemoteCount = 0
 
         // Step 1: Download & Apply Remote Operations

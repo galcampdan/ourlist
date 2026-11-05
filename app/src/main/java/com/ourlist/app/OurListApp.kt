@@ -18,6 +18,7 @@ import com.ourlist.app.data.repository.NotificationRepository
 import com.ourlist.app.data.sync.CoupleSyncClient
 import com.ourlist.app.data.sync.DriveSyncClient
 import com.ourlist.app.data.sync.SyncEngine
+import com.ourlist.app.data.update.AppUpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +61,9 @@ class OurListApp : Application() {
         private set
 
     lateinit var safBackupManager: SafBackupManager
+        private set
+
+    lateinit var appUpdateManager: AppUpdateManager
         private set
 
     override fun onCreate() {
@@ -119,6 +123,10 @@ class OurListApp : Application() {
             dataStoreManager = dataStoreManager,
             driveClient = driveClient
         )
+
+        appUpdateManager = AppUpdateManager(this) {
+            dataStoreManager.firebaseRtdbUrlFlow.first()
+        }
 
         // Auto-sync whenever there are local changes ("변동이 있을 때")
         scope.launch(Dispatchers.IO) {

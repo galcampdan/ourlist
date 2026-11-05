@@ -2,6 +2,7 @@ package com.ourlist.app.ui.screens.shared
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.ourlist.app.data.model.ConflictRecord
+import com.ourlist.app.data.model.DDayCalculator
 import com.ourlist.app.data.model.SortOption
 import com.ourlist.app.data.model.ViewMode
 import com.ourlist.app.data.sync.SyncState
@@ -72,6 +74,9 @@ import com.ourlist.app.ui.theme.Primary
 import com.ourlist.app.ui.theme.SurfaceRaised
 import com.ourlist.app.ui.theme.TextPrimary
 import com.ourlist.app.ui.theme.TextSecondary
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,10 +97,19 @@ fun SharedScreen(
     val syncState by viewModel.syncState.collectAsState()
     val unresolvedConflicts by viewModel.unresolvedConflicts.collectAsState()
     val dreamGaugeStats by viewModel.dreamGaugeStats.collectAsState()
+    val datingStartDate by viewModel.datingStartDate.collectAsState()
 
     val haptics = rememberHaptics()
     var activeConflictToResolve by remember { mutableStateOf<ConflictRecord?>(null) }
     val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
+
+    val todayFormatted = remember {
+        LocalDate.now().format(DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN))
+    }
+    val dDayText = remember(datingStartDate) {
+        DDayCalculator.formatDDayText(datingStartDate)
+    }
+    val headerSubtitle = if (dDayText != null) "$todayFormatted · $dDayText" else todayFormatted
 
     var draggedIndex by remember { mutableStateOf<Int?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
@@ -132,6 +146,7 @@ fun SharedScreen(
         item {
             HomeHeader(
                 title = "우리의 버킷리스트",
+                subtitle = headerSubtitle,
                 accentColor = Primary,
                 actions = {
                     Row(
@@ -169,41 +184,48 @@ fun SharedScreen(
                             }
                         }
 
-                        // Notification bell icon with unread count badge
+                        // Notification bell icon with unread count badge (immune to clipping)
                         Box(
-                            modifier = Modifier
-                                .size(OurListDimens.MinTouchTarget)
-                                .clip(CircleShape)
-                                .background(SurfaceRaised)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                ) {
-                                    haptics.tick()
-                                    onNavigateToNotifications()
-                                },
+                            modifier = Modifier.size(OurListDimens.MinTouchTarget),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Notifications,
-                                contentDescription = "알림",
-                                tint = if (unreadNotificationCount > 0) Primary else TextSecondary,
-                                modifier = Modifier.size(22.dp),
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(SurfaceRaised)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        haptics.tick()
+                                        onNavigateToNotifications()
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Notifications,
+                                    contentDescription = "알림",
+                                    tint = if (unreadNotificationCount > 0) Primary else TextSecondary,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                            }
                             if (unreadNotificationCount > 0) {
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
                                         .offset(x = 2.dp, y = (-2).dp)
-                                        .clip(CircleShape)
-                                        .background(HeartRed)
-                                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                                        .background(HeartRed, shape = CircleShape)
+                                        .border(2.dp, Ink, shape = CircleShape)
+                                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
                                         text = if (unreadNotificationCount > 99) "99+" else "$unreadNotificationCount",
                                         color = Color.White,
-                                        fontSize = 9.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
+                                        lineHeight = 11.sp,
                                     )
                                 }
                             }

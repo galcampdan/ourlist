@@ -43,6 +43,9 @@ class BucketListViewModel(
 ) : ViewModel() {
 
     val syncState: StateFlow<SyncState> = syncEngine.syncState
+    val datingStartDate: StateFlow<String> = dataStoreManager.datingStartDateFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), ""
+    )
     val viewMode: StateFlow<ViewMode> = dataStoreManager.viewModeFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), ViewMode.LIST
     )

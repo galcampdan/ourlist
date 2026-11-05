@@ -21,7 +21,8 @@ data class RoomMeta(
     val deviceA: String = "",
     val userAName: String = "나",
     val deviceB: String = "",
-    val userBName: String = "상대방"
+    val userBName: String = "상대방",
+    val datingStartDate: String = ""
 ) {
     val isBothConnected: Boolean
         get() = deviceA.isNotBlank() && deviceB.isNotBlank() && deviceA != deviceB
@@ -246,6 +247,23 @@ class CoupleSyncClient(
             } catch (e: Exception) {
                 null
             }
+        }
+    }
+
+    suspend fun updateDatingStartDate(roomCode: String, date: String): Boolean = withContext(Dispatchers.IO) {
+        val base = getCleanBaseUrl()
+        val patchObj = JSONObject().apply {
+            put("datingStartDate", date)
+        }
+        val patchBody = patchObj.toString().toRequestBody(jsonMediaType)
+        val req = Request.Builder()
+            .url("$base/rooms/$roomCode/meta.json")
+            .patch(patchBody)
+            .build()
+        try {
+            client.newCall(req).execute().use { resp -> resp.isSuccessful }
+        } catch (e: Exception) {
+            false
         }
     }
 }

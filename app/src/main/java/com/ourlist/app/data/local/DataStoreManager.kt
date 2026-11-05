@@ -46,6 +46,7 @@ class DataStoreManager(private val context: Context) {
         val SAF_BACKUP_ENABLED = booleanPreferencesKey("saf_backup_enabled")
         val LAST_SAF_BACKUP_TIME = longPreferencesKey("last_saf_backup_time")
         val IS_PARTNER_CONNECTED = booleanPreferencesKey("is_partner_connected")
+        val DATING_START_DATE = stringPreferencesKey("dating_start_date")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -89,6 +90,7 @@ class DataStoreManager(private val context: Context) {
     val safBackupEnabledFlow: Flow<Boolean> = context.dataStore.data.map { it[Keys.SAF_BACKUP_ENABLED] ?: true }
     val lastSafBackupTimeFlow: Flow<Long> = context.dataStore.data.map { it[Keys.LAST_SAF_BACKUP_TIME] ?: 0L }
     val isPartnerConnectedFlow: Flow<Boolean> = context.dataStore.data.map { it[Keys.IS_PARTNER_CONNECTED] ?: false }
+    val datingStartDateFlow: Flow<String> = context.dataStore.data.map { it[Keys.DATING_START_DATE] ?: "" }
 
     val viewModeFlow: Flow<ViewMode> = context.dataStore.data.map {
         val name = it[Keys.VIEW_MODE] ?: ViewMode.LIST.name
@@ -172,6 +174,10 @@ class DataStoreManager(private val context: Context) {
 
     suspend fun setPartnerConnected(connected: Boolean) {
         context.dataStore.edit { it[Keys.IS_PARTNER_CONNECTED] = connected }
+    }
+
+    suspend fun setDatingStartDate(date: String) {
+        context.dataStore.edit { it[Keys.DATING_START_DATE] = date }
     }
 
     suspend fun setViewMode(mode: ViewMode) {

@@ -1,5 +1,6 @@
 package com.ourlist.app.ui.screens.more
 
+import android.app.DatePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -41,8 +42,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import com.ourlist.app.data.model.DDayCalculator
+import java.time.LocalDate
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -119,6 +123,7 @@ fun CoupleConnectScreen(
 
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
     val isPartnerConnected by dataStoreManager.isPartnerConnectedFlow.collectAsState(initial = false)
+    val datingStartDate by dataStoreManager.datingStartDateFlow.collectAsState(initial = "")
     val userName by dataStoreManager.userNameFlow.collectAsState(initial = "")
     val partnerName by dataStoreManager.partnerNameFlow.collectAsState(initial = "")
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
@@ -135,6 +140,32 @@ fun CoupleConnectScreen(
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var showAdvancedUrl by remember { mutableStateOf(false) }
     var inputFirebaseUrl by remember(firebaseUrl) { mutableStateOf(firebaseUrl) }
+
+    fun showNativeDatePicker() {
+        val parts = datingStartDate.split("-")
+        val initYear = parts.getOrNull(0)?.toIntOrNull() ?: LocalDate.now().year
+        val initMonth = (parts.getOrNull(1)?.toIntOrNull() ?: LocalDate.now().monthValue) - 1
+        val initDay = parts.getOrNull(2)?.toIntOrNull() ?: LocalDate.now().dayOfMonth
+
+        val datePickerDialog = DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val formatted = "%04d-%02d-%02d".format(year, month + 1, dayOfMonth)
+                coroutineScope.launch {
+                    dataStoreManager.setDatingStartDate(formatted)
+                    if (coupleCode.isNotBlank()) {
+                        coupleClient.updateDatingStartDate(coupleCode, formatted)
+                    }
+                    val days = DDayCalculator.calculateDays(formatted)
+                    Toast.makeText(context, "사귄 날짜가 저장되었습니다! (함께한 지 ${days}일째 💕)", Toast.LENGTH_SHORT).show()
+                }
+            },
+            initYear,
+            initMonth,
+            initDay
+        )
+        datePickerDialog.show()
+    }
 
     // Active polling to detect when partner joins
     LaunchedEffect(coupleCode) {
@@ -587,6 +618,45 @@ fun CoupleConnectScreen(
                             Icon(imageVector = Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text("호칭 변경 저장", fontWeight = FontWeight.Bold)
+                        }
+
+                        HorizontalDivider(color = Divider, modifier = Modifier.padding(vertical = 4.dp))
+
+                        // Dating start date D-Day row
+                        val dDayStr = DDayCalculator.formatDDayText(datingStartDate)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(SurfaceRaised)
+                                .clickable {
+                                    haptics.tick()
+                                    showNativeDatePicker()
+                                }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(
+                                    text = "💖 사귄 날짜 (D-Day)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = if (datingStartDate.isNotBlank()) "$datingStartDate ($dDayStr)" else "터치하여 사귄 날짜를 설정하세요",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (datingStartDate.isNotBlank()) Income else TextTertiary
+                                )
+                            }
+                            Text(
+                                text = if (datingStartDate.isNotBlank()) "변경" else "설정",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Primary
+                            )
                         }
                     }
                 }
