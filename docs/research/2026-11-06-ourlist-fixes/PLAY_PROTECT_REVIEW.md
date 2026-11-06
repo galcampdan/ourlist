@@ -33,3 +33,11 @@ Our source/merged-manifest review found no SMS/contact-reading permissions, Acce
 ## 증거
 
 play-protect-verdict.log, evidence/update-play-protect-result.*, evidence/update-play-protect-details.*, public-release-verification.json.
+
+
+## 접수 진행 상태 — 사용자 명시 승인 이후
+
+- 사용자가 정확한 APK의 VirusTotal 보안 커뮤니티 공유·약관 동의와 현재 로그인된 Google 계정으로 재검토 제출을 허용했다.
+- Google 영문 양식에 패키지/정확한 SHA-256/929자 설명을 작성했다. 최종 Submit은 누르지 않았다.
+- 사용자가 기존 Drive APK를 선택했다. VirusTotal의 3MB/복수 파일 archive 경고에는 업로드는 가능하다고 명시되어 있다. 원본 APK 그대로 Confirm upload를 눌렀으나 빈 reCAPTCHA 창과 연결 오류로 멈췄다. 업로드나 검사 완료는 확인되지 않았다.
+- 다음 작업은 보안문자 연결을 정상적으로 해결하고 동일 해시의 VT 결과 페이지를 확인한 후 Google 양식을 제출하는 것이다. 공식 크기 설명: https://docs.virustotal.com/docs/compressed-files .
