@@ -1,0 +1,11 @@
+{
+  "apkSha256": "25F30BD60C3129FAFF2940D6B92AA53E5A277051644EEB0FF03DCAE72E50D74A",
+  "apkSize": 14361024,
+  "apkUrl": "https://github.com/galcampdan/ourlist/releases/download/v1.0.8/OurList-v1.0.8-release.apk",
+  "forceUpdate": false,
+  "latestVersionCode": 9,
+  "latestVersionName": "1.0.8",
+  "minSupportedVersion": 1,
+  "publishedAt": 1793950375289,
+  "releaseNotes": "보안 연결: 두 휴대폰 모두 업데이트 후 새 코드와 확인번호로 다시 연결해주세요. 기존 목록은 유지됩니다.\n공동·하트 동기화, 백업·복원, 작성 내용 보존, 큰 글씨 화면을 개선했습니다."
+}

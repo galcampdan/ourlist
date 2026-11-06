@@ -1,0 +1,3 @@
+11-06 07:35:44.675  8267 12154 I Finsky  : [172] VerifyApps: APK is not malformed
+11-06 07:36:54.120  8267 12242 I Finsky  : [188] VerifyApps: JIT scan response: {"verdict":"POTENTIALLY_UNWANTED","moreInfo":{"description":"This app may be harmful.","threatType":"generic_malware"},"upload":true}
+11-06 07:36:54.120  8267 12242 I Finsky  : [188] VerifyApps: JIT scan completed successfully with response code: 200

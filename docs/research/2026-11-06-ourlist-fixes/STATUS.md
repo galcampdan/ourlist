@@ -22,10 +22,21 @@
 - 200% 글씨에서 동기화 버튼과 가로 스크롤 필터 확인. 수동 암호화 백업 파일 저장·선택과 복구 코드로 개인 항목 1개 복원 성공.
 - 선택 증거: evidence/, 자동 검사 XML 및 firebase-*-security-results.json. 원본 공개 규칙 백업은 firebase-live-rules-before.json. 보안 규칙 원복 대상으로 사용하지 않는다.
 
-## 남은 배포 작업
+## 배포 결과 — 검증 보류
 
-소스 커밋/태그와 일치하는 GitHub v1.0.8 Release, 공개 APK 해시 검증, Firebase 공지 조건부 갱신·readback, 구버전 앱 내 다운로드→설치 확인.
+- GitHub v1.0.8 공개 업로드 및 공개 다운로드 크기/SHA-256 검증 완료. 소스 태그는 9e76407, 최종 Release SHA-256은 25F30BD60C3129FAFF2940D6B92AA53E5A277051644EEB0FF03DCAE72E50D74A, 크기 14,361,024 bytes.
+- Firebase app_version을 1.0.8(9)로 조건부 갱신·공개 readback했다. 기존 1.0.7에서 업데이트 발견, 다운로드, 출처 허용, Android 설치 확인까지 실행했다.
+- Play Protect 권장 검사 후 서버 판정 POTENTIALLY_UNWANTED / generic_malware로 설치 차단. 구체적 원인 UNKNOWN. 기존 버전은 1.0.7(8)이며 정상 앱 내 업데이트 설치는 검증 실패다. 경고 우회나 보호 기능 비활성화는 하지 않았다.
+- 사용자 명시 승인 후 Firebase 공지를 이전 1.0.7(8)로 ETag 조건부 복원·readback했고 GitHub 1.0.8은 검증 보류 사전 출시로 표시했다. 서버 인증 규칙은 유지했다. 기존 legacy 동기화는 차단된 상태며 로컬 목록은 유지된다.
+- Google 검토 양식/설명/해시/서명/증거는 PLAY_PROTECT_REVIEW.md에 준비했다. VirusTotal 업로드나 Google 재검토 제출은 하지 않았다. 브라우저는 BitLocker E: 잠금으로 사용 불가다.
+- 신규 APK 7개 전체 보관 경로·해시: ../../../reports/releases/OurList-1.0.8-delivery.md. Drive 실제 클라우드 업로드 완료는 미검증.
+
+## 시험 데이터 정리
+
+- REST 보안 시험 방과 그 임시 익명 계정 3개 삭제 완료.
+- 사용자가 승인한 UI 시험 방 944157와 pairRequests 삭제 완료. 새 QA 에뮬레이터 Debug 저장소에서 확인한 요청자 UID만 삭제·lookup readback했다.
+- 방 생성자 계정은 정리 미완료: 방 삭제와 Release 시험 앱 제거 전에 UID를 보관하지 않았다. 활성 계정 batchDelete는 force=true가 필요했으며 최초 요청은 실패했다. 다른 계정을 오인하지 않도록 광범위 계정 열거를 시도했으나 자동 승인에서 거부됐다. 기존 사용자 계정은 삭제하지 않았다.
 
 ## UNKNOWN / 한계
 
-실제 Google 계정 로그인 및 Drive appData 자동 백업/복원은 실행하지 않았다. 관련 HTTP 계약·암호화 테스트는 통과했다. 물리 휴대폰, 장시간 동시 오프라인 편집, Drive 실제 클라우드 업로드 완료는 미검증이다.
+Play Protect 분류 원인/해제, 실제 Google 계정 OAuth 및 Drive 자동 백업/복원, 물리 휴대폰, 장시간 동시 오프라인 편집, Drive 실제 클라우드 업로드 완료는 미검증이다. 다음 권장 작업은 정확한 APK의 외부 분류 재검토이며 재검토 전 정상 배포 완료로 보고하지 않는다.

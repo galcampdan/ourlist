@@ -1,0 +1,14 @@
+[
+  {
+    "app": "OurList",
+    "variant": "release",
+    "versionName": "1.0.8",
+    "versionCode": "9",
+    "buildTimeKst": "20261106-163020",
+    "source": "C:\\Users\\atlan\\Documents\\Projects\\OurList\\app\\build\\outputs\\apk\\release\\app-release.apk",
+    "driveCopy": "G:\\내 드라이브\\03_앱개발\\ourlist\\OurList-release-v1.0.8-9-20261106-163020.apk",
+    "bytes": 14361024,
+    "sha256": "25F30BD60C3129FAFF2940D6B92AA53E5A277051644EEB0FF03DCAE72E50D74A",
+    "cloudSync": "not_verified"
+  }
+]

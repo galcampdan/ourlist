@@ -1,0 +1,13 @@
+{
+  "userAuthorized": true,
+  "reason": "Play Protect POTENTIALLY_UNWANTED / generic_malware; installation blocked",
+  "restored": {
+    "apkUrl": "https://github.com/galcampdan/ourlist/releases/download/v1.0.7/OurList-v1.0.7-release.apk",
+    "forceUpdate": false,
+    "latestVersionCode": 8,
+    "latestVersionName": "1.0.7",
+    "minSupportedVersion": 1,
+    "publishedAt": 1793880390000,
+    "releaseNotes": "1. 다크 OLED 맞춤형 캘린더 날짜선택기 추가 (임의 문자열 입력 방지 및 실시간 D-Day 뱃지)\n2. 상대방 등록 버킷리스트가 '등록: 나'로 표시되던 오류 해결\n3. 사귄 날짜 설정 시 시스템 기본(Material) 다이얼로그 완전 제거"
+  }
+}
