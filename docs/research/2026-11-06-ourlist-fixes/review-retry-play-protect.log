@@ -1,0 +1,3 @@
+11-06 08:38:07.130  1970  4044 I Finsky  : [115] VerifyApps: APK is not malformed
+11-06 08:38:09.012  1970  4045 I Finsky  : [116] VerifyApps: Verification package=com.ourlist.app, id=0, response=3, upload_requested=false, enable_ecm=false
+11-06 08:38:09.042  1970  4044 I Finsky  : [115] VerifyApps: chooseScanResult returning verdict 3 for package=com.ourlist.app

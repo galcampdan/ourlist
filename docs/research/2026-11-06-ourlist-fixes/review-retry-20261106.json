@@ -1,0 +1,20 @@
+{
+  "checkedAtKst": "2026-11-06 17:38-17:39",
+  "artifactSha256": "25F30BD60C3129FAFF2940D6B92AA53E5A277051644EEB0FF03DCAE72E50D74A",
+  "target": "OurListSecureQA API36 / emulator-5582",
+  "path": "normal Android package installer from Download Manager",
+  "observedWarning": "Harmful app blocked / This app may be harmful.",
+  "installerResult": "App not installed.",
+  "installedVersionName": "1.0.7",
+  "installedVersionCode": 8,
+  "fixturePreserved": "AuditUpgrade107to108",
+  "playProtectWarningOverridden": false,
+  "updateNoticePromoted": false,
+  "githubReleasePromoted": false,
+  "evidence": [
+    "evidence/review-retry-install-result.png",
+    "evidence/review-retry-install-result.xml",
+    "evidence/review-retry-old-data-preserved.png",
+    "review-retry-play-protect.log"
+  ]
+}

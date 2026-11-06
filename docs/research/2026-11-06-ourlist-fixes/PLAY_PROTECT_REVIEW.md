@@ -46,3 +46,8 @@ play-protect-verdict.log, evidence/update-play-protect-result.*, evidence/update
 ## 최종 접수 상태 — 2026-11-06
 
 사용자가 최종 APK와 동일한 SHA-256의 VirusTotal 결과(0/67, Google Undetected)를 제공했다. 이후 Google 양식의 최종 성공 문구 `Your email has been sent`를 제공하여 재검토 요청 접수를 확인했다. 이 기록의 증거 출처는 사용자 제공 결과이며 자동 브라우저 재검증은 하지 않았다. 중복 접수하지 않는다. 양식은 회신을 보내지 않는다고 안내한다. 검토 완료 시점과 Play Protect 경고 해제 여부는 UNKNOWN이며, 기존 업데이트 공지 보류는 유지한다.
+
+
+## 재설치 확인 — 2026-11-06 17:38–17:39 KST
+
+사용자 요청으로 동일 SHA-256의 APK를 기존 API36 시험 환경에서 Download Manager → Android 일반 설치 화면으로 재시도했다. Play Protect `Harmful app blocked / This app may be harmful`과 최종 `App not installed.`를 직접 확인했다. 설치된 버전은 1.0.7(8), 기존 시험 항목 AuditUpgrade107to108은 보존됐다. 경고 우회는 하지 않았다. 업데이트 공지 1.0.7 및 GitHub 1.0.8 사전 출시 보류를 유지했다. 새 APK를 빌드하거나 재검토를 중복 접수하지 않았다.
