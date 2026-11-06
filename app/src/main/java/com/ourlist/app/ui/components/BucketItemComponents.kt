@@ -4,6 +4,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -355,10 +358,8 @@ fun CompleteCheckCircle(
             .size(30.dp)
             .clip(CircleShape)
             .background(bgColor)
-            .clickable(
-                role = Role.Checkbox,
-                onClick = onToggle,
-            ),
+            .toggleable(value = isDone, role = Role.Checkbox, onValueChange = { onToggle() })
+            .semantics { contentDescription = if (isDone) "완료 취소" else "버킷리스트 완료하기" },
         contentAlignment = Alignment.Center,
     ) {
         if (!isDone) {

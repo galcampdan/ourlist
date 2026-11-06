@@ -1,506 +1,195 @@
 package com.ourlist.app.ui.screens.more
 
-import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Restore
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.ourlist.app.data.backup.BackupManager
-import com.ourlist.app.data.backup.CryptoEngine
-import com.ourlist.app.data.backup.RestoreMode
+import androidx.work.*
+import com.ourlist.app.data.backup.*
 import com.ourlist.app.data.local.DataStoreManager
-import com.ourlist.app.ui.components.HomeHeader
+import com.ourlist.app.data.sync.DriveFileMetadata
 import com.ourlist.app.ui.components.OurListCard
-import com.ourlist.app.ui.components.OurListSwitch
-import com.ourlist.app.ui.rememberHaptics
-import com.ourlist.app.ui.theme.Divider
-import com.ourlist.app.ui.theme.Income
-import com.ourlist.app.ui.theme.Ink
-import com.ourlist.app.ui.theme.OurListDimens
-import com.ourlist.app.ui.theme.Primary
-import com.ourlist.app.ui.theme.Review
-import com.ourlist.app.ui.theme.Surface
-import com.ourlist.app.ui.theme.SurfaceRaised
-import com.ourlist.app.ui.theme.TextPrimary
-import com.ourlist.app.ui.theme.TextSecondary
-import com.ourlist.app.ui.theme.TextTertiary
+import com.ourlist.app.ui.theme.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private suspend fun readBackupFile(context: Context, uri: Uri): String = withContext(Dispatchers.IO) {
+    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
+        val buffer = CharArray(8192)
+        val text = StringBuilder()
+        while (true) {
+            val count = reader.read(buffer)
+            if (count < 0) break
+            require(text.length + count <= 20 * 1024 * 1024) { "백업 파일은 20MB까지 읽을 수 있습니다." }
+            text.append(buffer, 0, count)
+        }
+        text.toString()
+    } ?: error("백업 파일을 열 수 없습니다.")
+}
+
 @Composable
-fun BackupScreen(
-    backupManager: BackupManager,
-    dataStoreManager: DataStoreManager,
-    onNavigateBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-    val coroutineScope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
-
-    val recoveryCode by dataStoreManager.recoveryCodeFlow.collectAsState(initial = "")
-    val autoBackupEnabled by dataStoreManager.autoBackupEnabledFlow.collectAsState(initial = false)
-    val lastBackupTime by dataStoreManager.lastBackupTimeFlow.collectAsState(initial = 0L)
-
-    var backupPassword by remember { mutableStateOf("") }
-    var restoreInput by remember { mutableStateOf("") }
-    var restorePasswordOrCode by remember { mutableStateOf("") }
-    var restoreMode by remember { mutableStateOf(RestoreMode.MERGE) }
-    var showRestoreDialog by remember { mutableStateOf(false) }
-
-    if (showRestoreDialog) {
-        AlertDialog(
-            onDismissRequest = { showRestoreDialog = false },
-            containerColor = SurfaceRaised,
-            shape = RoundedCornerShape(OurListDimens.CardCorner),
-            title = {
-                Text(
-                    text = "암호화 백업 복원",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = "백업 데이터(Base64)와 백업 시 설정했던 비밀번호(또는 복구 코드)를 입력하세요.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
-                    )
-                    OutlinedTextField(
-                        value = restoreInput,
-                        onValueChange = { restoreInput = it },
-                        placeholder = { Text("암호화 백업 데이터 붙여넣기", color = TextTertiary) },
-                        minLines = 3,
-                        maxLines = 5,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Surface,
-                            unfocusedContainerColor = Surface,
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
-                    OutlinedTextField(
-                        value = restorePasswordOrCode,
-                        onValueChange = { restorePasswordOrCode = it },
-                        placeholder = { Text("비밀번호 또는 복구 코드", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Surface,
-                            unfocusedContainerColor = Surface,
-                            focusedBorderColor = Primary,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(text = "복원 방식:", style = MaterialTheme.typography.labelMedium, color = Primary, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = restoreMode == RestoreMode.MERGE,
-                            onClick = { restoreMode = RestoreMode.MERGE },
-                            colors = RadioButtonDefaults.colors(selectedColor = Primary),
-                        )
-                        Text("병합 (최신 데이터 유지)", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = restoreMode == RestoreMode.OVERWRITE,
-                            onClick = { restoreMode = RestoreMode.OVERWRITE },
-                            colors = RadioButtonDefaults.colors(selectedColor = Primary),
-                        )
-                        Text("덮어쓰기 (기존 개인 데이터 교체)", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (restoreInput.isBlank() || restorePasswordOrCode.isBlank()) {
-                            Toast.makeText(context, "데이터와 비밀번호를 모두 입력하세요.", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        haptics.confirm()
-                        coroutineScope.launch {
-                            val res = backupManager.restoreEncryptedBackup(
-                                restoreInput.trim(),
-                                restorePasswordOrCode.trim(),
-                                restoreMode
-                            )
-                            if (res.isSuccess) {
-                                Toast.makeText(context, "${res.getOrNull()}개 항목이 성공적으로 복원되었습니다.", Toast.LENGTH_SHORT).show()
-                                showRestoreDialog = false
-                            } else {
-                                Toast.makeText(context, "복원 실패: 비밀번호나 백업 데이터를 확인하세요.", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Ink),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("복원 실행", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRestoreDialog = false }) {
-                    Text("취소", color = TextSecondary)
-                }
-            }
-        )
+private fun BackupSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    OurListCard(modifier=Modifier.fillMaxWidth(),containerColor=Surface) {
+        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text(title,style=MaterialTheme.typography.titleMedium,color=TextPrimary)
+            content()
+        }
     }
+}
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Ink)
-            .statusBarsPadding(),
-        contentPadding = PaddingValues(
-            start = OurListDimens.ScreenPadding,
-            top = 16.dp,
-            end = OurListDimens.ScreenPadding,
-            bottom = 20.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        // 1. Header
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(OurListDimens.MinTouchTarget)
-                        .clip(CircleShape)
-                        .background(SurfaceRaised)
-                        .clickable {
-                            haptics.tick()
-                            onNavigateBack()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = "뒤로가기",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(20.dp),
-                    )
+@Composable
+private fun SecretInput(value:String,onChange:(String)->Unit,label:String) {
+    var visible by remember { mutableStateOf(false) }
+    OutlinedTextField(value=value,onValueChange=onChange,label={Text(label)},singleLine=true,
+        modifier=Modifier.fillMaxWidth(),visualTransformation=if(visible) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions=androidx.compose.foundation.text.KeyboardOptions(keyboardType=androidx.compose.ui.text.input.KeyboardType.Password),
+        trailingIcon={TextButton(onClick={visible=!visible}) {Text(if(visible) "숨기기" else "표시")}})
+}
+
+@Composable
+fun BackupScreen(backupManager:BackupManager,dataStoreManager:DataStoreManager,onNavigateBack:()->Unit,modifier:Modifier=Modifier,onConnectDrive:()->Unit={}) {
+    val context=LocalContext.current
+    val clipboard=LocalClipboardManager.current
+    val scope=rememberCoroutineScope()
+    val recoveryCode by dataStoreManager.recoveryCodeFlow.collectAsState(initial="")
+    val autoBackup by dataStoreManager.autoBackupEnabledFlow.collectAsState(initial=false)
+    val lastBackup by dataStoreManager.lastBackupTimeFlow.collectAsState(initial=0L)
+    val email by dataStoreManager.userEmailFlow.collectAsState(initial="")
+    val backupError by dataStoreManager.lastBackupErrorFlow.collectAsState(initial="")
+    var password by remember { mutableStateOf("") }
+    var restoreInput by remember { mutableStateOf("") }
+    var restorePassword by remember { mutableStateOf("") }
+    var overwrite by rememberSaveable { mutableStateOf(false) }
+    var showRestore by rememberSaveable { mutableStateOf(false) }
+    var confirmNewCode by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var message by rememberSaveable { mutableStateOf("") }
+    var cloudBackups by remember { mutableStateOf<List<DriveFileMetadata>?>(null) }
+    val pendingFile=remember { File(context.cacheDir,"pending-manual-backup.enc") }
+    val saveFile=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if(uri!=null) scope.launch {
+            busy=true
+            try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri,"wt")?.use { output -> pendingFile.inputStream().use { it.copyTo(output) } } ?: error("파일을 저장할 수 없습니다.")
                 }
-                Spacer(Modifier.width(12.dp))
-                HomeHeader(
-                    title = "백업 및 복원",
-                    subtitle = "AES-256-GCM 보안 암호화",
-                    accentColor = Income,
-                )
+                message="암호화 백업을 저장했습니다. 복구 코드도 따로 보관해주세요."
+            } catch(e:Exception) { message="저장 실패: ${e.message}" } finally {busy=false}
+        }
+    }
+    val openFile=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if(uri!=null) scope.launch {
+            busy=true
+            try { restoreInput=readBackupFile(context,uri);showRestore=true;message="백업 파일을 불러왔습니다." }
+            catch(e:Exception) {message="파일 읽기 실패: ${e.message}"} finally {busy=false}
+        }
+    }
+    if(confirmNewCode) AlertDialog(onDismissRequest={confirmNewCode=false},title={Text("복구 코드를 재발급할까요?")},
+        text={Text("새 코드는 앞으로 생성하는 백업에 적용됩니다. 이전 백업은 당시 비밀번호 또는 이전 복구 코드가 필요합니다.")},
+        confirmButton={TextButton(onClick={scope.launch {dataStoreManager.setRecoveryCode(CryptoEngine.generateRecoveryCode());confirmNewCode=false}}){Text("재발급")}},
+        dismissButton={TextButton(onClick={confirmNewCode=false}){Text("취소")}})
+    if(cloudBackups!=null) AlertDialog(onDismissRequest={cloudBackups=null},title={Text("자동 백업 선택")},
+        text={Column(Modifier.verticalScroll(rememberScrollState())) {
+            if(cloudBackups!!.isEmpty()) Text("저장된 자동 백업이 없습니다.")
+            cloudBackups!!.forEach { file -> TextButton(enabled=!busy,onClick={scope.launch {
+                busy=true
+                try {restoreInput=backupManager.readAutoBackup(file.id);cloudBackups=null;showRestore=true}
+                catch(e:Exception) {message="백업 다운로드 실패: ${e.message}"} finally {busy=false}
+            }}) {Text(file.name)} }
+        }},confirmButton={TextButton(onClick={cloudBackups=null}){Text("닫기")}})
+    if(showRestore) AlertDialog(onDismissRequest={if(!busy) showRestore=false},title={Text("암호화 백업 복원")},
+        text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Text("개인·비밀 목록만 복원합니다. 1.0.7 이전 백업은 당시 비밀번호가 필요합니다.")
+            OutlinedButton(enabled=!busy,onClick={openFile.launch(arrayOf("*/*"))}){Text("백업 파일 선택")}
+            OutlinedTextField(value=restoreInput,onValueChange={restoreInput=it},label={Text("백업 내용 (파일 선택 또는 붙여넣기)")},minLines=2,maxLines=3,modifier=Modifier.fillMaxWidth())
+            SecretInput(restorePassword,{restorePassword=it},"비밀번호 또는 백업 당시 복구 코드")
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(checked=overwrite,onCheckedChange={overwrite=it}); Text("기존 개인·비밀 목록을 교체 (기본은 병합)",modifier=Modifier.weight(1f))
+            }
+            if(overwrite) Text("덮어쓰기는 현재 개인·비밀 목록과 휴지통을 백업 내용으로 교체합니다.",color=Danger)
+            if(message.isNotBlank()) Text(message,color=TextSecondary)
+        }},confirmButton={TextButton(enabled=!busy&&restoreInput.isNotBlank()&&restorePassword.isNotEmpty(),onClick={scope.launch {
+            busy=true
+            try {
+                val result=backupManager.restoreEncryptedBackup(restoreInput,restorePassword,if(overwrite) RestoreMode.OVERWRITE else RestoreMode.MERGE)
+                result.onSuccess {message="${it}개 항목을 복원했습니다.";showRestore=false;restorePassword=""}
+                    .onFailure {message="복원 실패: ${it.message ?: "비밀번호와 백업 파일을 확인해주세요."}"}
+            } finally {busy=false}
+        }}){Text(if(busy) "처리 중" else "복원 실행")}},dismissButton={TextButton(enabled=!busy,onClick={showRestore=false}){Text("취소")}})
+
+    Column(modifier.fillMaxSize().background(Ink).statusBarsPadding().navigationBarsPadding().imePadding()
+        .verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+            TextButton(onClick=onNavigateBack){Text("뒤로가기")}
+            Text("백업 및 복원",style=MaterialTheme.typography.headlineSmall,color=TextPrimary)
+        }
+        if(busy) LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
+        if(message.isNotBlank()) Text(message,color=TextPrimary,modifier=Modifier.fillMaxWidth())
+        BackupSection("내 복구 코드") {
+            Text("새 백업은 비밀번호 또는 백업 당시의 복구 코드로 열 수 있습니다. 이 코드를 잃지 않도록 따로 보관해주세요.",color=TextSecondary)
+            if(recoveryCode.isNotBlank()) {
+                Text(recoveryCode,color=Primary)
+                TextButton(onClick={clipboard.setText(AnnotatedString(recoveryCode));message="복구 코드를 복사했습니다."}){Text("복구 코드 복사")}
+            }
+            OutlinedButton(enabled=!busy,onClick={if(recoveryCode.isNotBlank()) confirmNewCode=true else scope.launch {dataStoreManager.setRecoveryCode(CryptoEngine.generateRecoveryCode())}}) {
+                Text(if(recoveryCode.isBlank()) "복구 코드 발급" else "복구 코드 재발급")
             }
         }
-
-        // 2. Recovery Code Card
-        item {
-            OurListCard(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = Surface,
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Primary.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(imageVector = Icons.Filled.Key, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "내 고유 복구 코드", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "백업 비밀번호를 잊어버렸을 때 이 복구 코드로 데이터를 복구할 수 있습니다. 안전한 곳에 따로 기록해두세요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(SurfaceRaised)
-                            .padding(14.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = recoveryCode.ifEmpty { "발급 버튼을 눌러주세요" },
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (recoveryCode.isEmpty()) TextTertiary else Primary,
-                            )
-                            if (recoveryCode.isNotEmpty()) {
-                                TextButton(
-                                    onClick = {
-                                        haptics.tick()
-                                        clipboardManager.setText(AnnotatedString(recoveryCode))
-                                        Toast.makeText(context, "복구 코드가 복사되었습니다.", Toast.LENGTH_SHORT).show()
-                                    },
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                ) {
-                                    Text("복사", color = Primary, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = {
-                            haptics.confirm()
-                            coroutineScope.launch {
-                                val newCode = CryptoEngine.generateRecoveryCode()
-                                dataStoreManager.setRecoveryCode(newCode)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Divider),
-                    ) {
-                        Text(
-                            if (recoveryCode.isEmpty()) "새 복구 코드 발급" else "복구 코드 재발급",
-                            color = TextPrimary,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
-            }
+        BackupSection("개인·비밀 목록 암호화 백업") {
+            Text("공동·하트 목록은 포함되지 않습니다. 선택한 파일 위치에 암호화하여 저장합니다.",color=TextSecondary)
+            SecretInput(password,{password=it},"백업 비밀번호")
+            Button(enabled=!busy&&password.isNotBlank(),onClick={scope.launch {
+                busy=true
+                try {
+                    val encrypted=backupManager.createEncryptedBackup(password)
+                    withContext(Dispatchers.IO){pendingFile.writeText(encrypted)}
+                    val time=SimpleDateFormat("yyyyMMdd-HHmmss",Locale.US).format(Date())
+                    saveFile.launch("OurList-backup-$time.enc")
+                } catch(e:Exception){message="백업 실패: ${e.message}"} finally {busy=false}
+            }}){Text("암호화 백업 파일 저장")}
+            OutlinedButton(enabled=!busy,onClick={openFile.launch(arrayOf("*/*"))}){Text("백업 파일에서 복원")}
+            TextButton(enabled=!busy,onClick={showRestore=true}){Text("백업 내용 붙여넣기로 복원")}
         }
-
-        // 3. Manual Encrypted Backup Card
-        item {
-            OurListCard(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = Surface,
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Income.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(imageVector = Icons.Filled.Security, contentDescription = null, tint = Income, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "수동 암호화 백업", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
+        BackupSection("Google Drive 자동 암호화 백업") {
+            Text(if(email.isBlank()) "자동 백업을 사용하려면 Google 계정을 연결해주세요." else "연결 계정: $email",color=TextSecondary)
+            OutlinedButton(enabled=!busy,onClick=onConnectDrive){Text("Google 계정 연결 / 권한 갱신")}
+            Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
+                Switch(checked=autoBackup,enabled=!busy,onCheckedChange={checked ->
+                    if(checked&&(email.isBlank()||recoveryCode.isBlank())) message="Google 계정을 연결하고 복구 코드를 먼저 발급해주세요."
+                    else scope.launch {
+                        dataStoreManager.setAutoBackupEnabled(checked)
+                        message=if(checked) "네트워크에 연결되면 첫 백업을 시작합니다. 아래 성공 시각과 오류를 확인해주세요." else "자동 백업을 껐습니다."
+                        if(checked) WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<AutoBackupWorker>()
+                            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build())
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "개인 및 비밀 버킷리스트를 AES-256-GCM으로 암호화하여 파일로 저장합니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = backupPassword,
-                        onValueChange = { backupPassword = it },
-                        placeholder = { Text("백업 암호화 비밀번호 입력", color = TextTertiary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = SurfaceRaised,
-                            unfocusedContainerColor = SurfaceRaised,
-                            focusedBorderColor = Income,
-                            unfocusedBorderColor = Divider,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                        ),
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            if (backupPassword.isBlank()) {
-                                Toast.makeText(context, "비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-                            haptics.confirm()
-                            coroutineScope.launch {
-                                val encrypted = backupManager.createEncryptedBackup(backupPassword)
-                                shareText(context, encrypted, "OurList_Encrypted_Backup.enc")
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Income, contentColor = Ink),
-                    ) {
-                        Text("암호화 백업 생성 및 내보내기", fontWeight = FontWeight.Bold)
-                    }
-                }
+                }); Text("하루 한 번 자동 백업",color=TextPrimary)
             }
-        }
-
-        // 4. Restore Card
-        item {
-            OurListCard(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = Surface,
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Review.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(imageVector = Icons.Filled.Restore, contentDescription = null, tint = Review, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(text = "암호화 백업 복원", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "저장해둔 암호화 백업 데이터와 비밀번호를 입력하여 개인 및 비밀 목록을 복원합니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
-                        onClick = {
-                            haptics.tick()
-                            showRestoreDialog = true
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Divider),
-                    ) {
-                        Text("백업 데이터 복원하기", color = TextPrimary)
-                    }
-                }
-            }
-        }
-
-        // 5. Google Drive Auto Backup Card
-        item {
-            OurListCard(
-                modifier = Modifier.fillMaxWidth(),
-                containerColor = Surface,
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(Primary.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(imageVector = Icons.Filled.CloudUpload, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(text = "Google Drive 자동 백업", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        }
-                        OurListSwitch(
-                            checked = autoBackupEnabled,
-                            onCheckedChange = { isChecked ->
-                                coroutineScope.launch {
-                                    dataStoreManager.setAutoBackupEnabled(isChecked)
-                                }
-                            },
-                            activeColor = Primary,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "변경 사항이 있을 때 하루 한 번 내 개인 Google Drive에 자동 암호화 업로드하며, 최근 7개 버전을 보관합니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                    )
-                    if (lastBackupTime > 0) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        val backupStr = SimpleDateFormat("yyyy.MM.dd HH:mm", Locale.KOREA).format(Date(lastBackupTime))
-                        Text(
-                            text = "최근 자동 백업: $backupStr",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Primary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                }
-            }
+            Text("개인·비밀 목록을 암호화하여 앱 전용 Drive 공간에 저장하고 최신 7개를 보관합니다. 복원할 때 백업 당시 복구 코드를 사용하세요.",color=TextSecondary)
+            if(backupError.isNotBlank()) Text("최근 백업 오류: $backupError",color=Danger)
+            if(lastBackup>0) Text("최근 성공: ${SimpleDateFormat("yyyy.MM.dd HH:mm",Locale.KOREA).format(Date(lastBackup))}",color=Primary)
+            OutlinedButton(enabled=!busy&&email.isNotBlank(),onClick={scope.launch {
+                busy=true
+                try {cloudBackups=backupManager.listAutoBackups()} catch(e:Exception){message="백업 조회 실패: ${e.message}"} finally {busy=false}
+            }}){Text("자동 백업 찾아서 복원")}
         }
     }
 }

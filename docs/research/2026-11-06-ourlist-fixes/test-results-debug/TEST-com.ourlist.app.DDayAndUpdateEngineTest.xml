@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.DDayAndUpdateEngineTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-06T05:11:12" hostname="MAIN" time="0.04">
+  <properties/>
+  <testcase name="testAppUpdateInfo_jsonSerializationAndComparison" classname="com.ourlist.app.DDayAndUpdateEngineTest" time="0.029"/>
+  <testcase name="testDDayCalculator_blankOrInvalidReturnsNull" classname="com.ourlist.app.DDayAndUpdateEngineTest" time="0.005"/>
+  <testcase name="testDDayCalculator_todayIsDay1" classname="com.ourlist.app.DDayAndUpdateEngineTest" time="0.001"/>
+  <testcase name="testDDayCalculator_pastDate" classname="com.ourlist.app.DDayAndUpdateEngineTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.ExportManagerTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-06T03:24:51" hostname="MAIN" time="0.008">
+  <properties/>
+  <testcase name="testExportToMarkdown" classname="com.ourlist.app.ExportManagerTest" time="0.003"/>
+  <testcase name="testExportToJson" classname="com.ourlist.app.ExportManagerTest" time="0.004"/>
+  <testcase name="testExportToCsv" classname="com.ourlist.app.ExportManagerTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

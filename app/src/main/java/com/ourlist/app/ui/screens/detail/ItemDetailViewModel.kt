@@ -23,6 +23,7 @@ sealed class DetailUiState {
     data class Success(val item: BucketItem, val isReminderOn: Boolean) : DetailUiState()
     object Saved : DetailUiState()
     object Deleted : DetailUiState()
+    object NotFound : DetailUiState()
 }
 
 class ItemDetailViewModel(
@@ -64,18 +65,15 @@ class ItemDetailViewModel(
                     val reminderOn = dataStoreManager.isReminderEnabled(item.id)
                     _uiState.value = DetailUiState.Success(item, reminderOn)
                 } else {
-                    val fallback = BucketItem(
-                        id = UUID.randomUUID().toString(),
-                        collection = initialCollection,
-                        title = ""
-                    )
-                    _uiState.value = DetailUiState.Success(fallback, isReminderOn = true)
+                    _uiState.value = DetailUiState.NotFound
                 }
             }
         }
     }
 
     private var isSaving = false
+    private val _saveError = MutableStateFlow<String?>(null)
+    val saveError = _saveError.asStateFlow()
 
     fun saveItem(
         title: String,
@@ -108,13 +106,18 @@ class ItemDetailViewModel(
         )
 
         viewModelScope.launch {
-            dataStoreManager.setItemReminderEnabled(updated.id, isReminderOn)
-            if (isNew) {
-                bucketRepository.createItem(updated)
-            } else {
-                bucketRepository.updateItem(updated)
+            try {
+                _saveError.value = null
+                dataStoreManager.setItemReminderEnabled(updated.id, isReminderOn)
+                if (isNew) bucketRepository.createItem(updated) else bucketRepository.updateItem(updated)
+                _uiState.value = DetailUiState.Saved
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _saveError.value = e.message ?: "저장하지 못했습니다. 다시 시도해주세요."
+            } finally {
+                isSaving = false
             }
-            _uiState.value = DetailUiState.Saved
         }
         return true
     }

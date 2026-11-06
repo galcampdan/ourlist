@@ -101,6 +101,9 @@ fun AppUpdateDialog(
             val fileName = "OurList-${updateInfo.latestVersionName}.apk"
             val result = appUpdateManager.downloadApk(
                 apkUrl = updateInfo.apkUrl,
+                expectedSha256 = updateInfo.apkSha256,
+                expectedSize = updateInfo.apkSize,
+                expectedVersionCode = updateInfo.latestVersionCode,
                 targetFileName = fileName,
                 onProgress = { progress, downloaded, total ->
                     downloadProgress = progress
@@ -114,7 +117,7 @@ fun AppUpdateDialog(
                 uiState = UpdateUiState.READY_TO_INSTALL
                 haptics.confirm()
                 // Auto trigger install
-                appUpdateManager.installApk(file)
+                appUpdateManager.installApk(file).onFailure { errorMessage = it.message ?: "설치 화면을 열 수 없습니다." }
             }.onFailure { error ->
                 errorMessage = error.message ?: "알 수 없는 다운로드 오류"
                 uiState = UpdateUiState.ERROR
@@ -238,7 +241,7 @@ fun AppUpdateDialog(
                                 .padding(12.dp)
                         ) {
                             Text(
-                                text = "다운로드가 완료되었습니다!\n안드로이드 패키지 설치 화면이 열리지 않으면 아래 [지금 설치하기]를 눌러주세요.",
+                                text = if (errorMessage.isNotBlank()) errorMessage else "APK 검증이 완료되었습니다. 안드로이드 설치 화면이 열리지 않으면 [지금 설치하기]를 눌러주세요.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Income,
                                 lineHeight = 18.sp

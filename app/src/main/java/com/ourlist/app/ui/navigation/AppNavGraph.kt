@@ -54,13 +54,21 @@ import kotlinx.coroutines.launch
 fun AppNavGraph(
     app: OurListApp,
     navController: NavHostController = rememberNavController(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    openItemId: String? = null,
+    onOpenItemHandled: () -> Unit = {}
 ) {
     val notificationsViewModel: NotificationsViewModel = viewModel(
         factory = NotificationsViewModel.Factory(app.notificationRepository)
     )
     val unreadCount by notificationsViewModel.unreadCount.collectAsState()
 
+    LaunchedEffect(openItemId) {
+        if (!openItemId.isNullOrBlank()) {
+            navController.navigate(AppRoutes.createDetailRoute(openItemId)) { launchSingleTop = true }
+            onOpenItemHandled()
+        }
+    }
     NavHost(
         navController = navController,
         startDestination = AppRoutes.SHARED,
@@ -169,7 +177,8 @@ fun AppNavGraph(
             BackupScreen(
                 backupManager = app.backupManager,
                 dataStoreManager = app.dataStoreManager,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onConnectDrive = { navController.navigate(AppRoutes.DRIVE_SETUP) }
             )
         }
 

@@ -122,12 +122,14 @@ fun CoupleConnectScreen(
     val haptics = rememberHaptics()
 
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
+    val coupleProtocol by dataStoreManager.coupleProtocolFlow.collectAsState(initial = 2)
+    var pendingRequests by remember { mutableStateOf<Map<String, com.ourlist.app.data.sync.JoinRequest>>(emptyMap()) }
+    var confirmationCode by remember { mutableStateOf("") }
     val isPartnerConnected by dataStoreManager.isPartnerConnectedFlow.collectAsState(initial = false)
     val datingStartDate by dataStoreManager.datingStartDateFlow.collectAsState(initial = "")
     val userName by dataStoreManager.userNameFlow.collectAsState(initial = "")
     val partnerName by dataStoreManager.partnerNameFlow.collectAsState(initial = "")
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
-    val firebaseUrl by dataStoreManager.firebaseRtdbUrlFlow.collectAsState(initial = "")
     val syncState by syncEngine.syncState.collectAsState()
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: 코드 생성, 1: 코드 입력
@@ -138,32 +140,32 @@ fun CoupleConnectScreen(
     var isOperating by remember { mutableStateOf(false) }
     var generatedCodeDisplay by remember { mutableStateOf("") }
     var showDisconnectDialog by remember { mutableStateOf(false) }
-    var showAdvancedUrl by remember { mutableStateOf(false) }
-    var inputFirebaseUrl by remember(firebaseUrl) { mutableStateOf(firebaseUrl) }
     var showDatingDatePickerDialog by remember { mutableStateOf(false) }
 
     // Active polling to detect when partner joins
-    LaunchedEffect(coupleCode) {
-        if (coupleCode.isBlank()) return@LaunchedEffect
+    LaunchedEffect(coupleCode, coupleProtocol) {
+        pendingRequests = emptyMap()
+        confirmationCode = ""
+        if (coupleCode.isBlank() || coupleProtocol < 2) return@LaunchedEffect
         while (true) {
             try {
                 val meta = coupleClient.fetchMeta(coupleCode)
                 if (meta != null) {
                     val both = meta.isBothConnected
-                    val prev = dataStoreManager.isPartnerConnectedFlow.first()
-                    if (both != prev) {
-                        dataStoreManager.setPartnerConnected(both)
-                        if (both) {
-                            withContext(Dispatchers.Main) {
-                                haptics.confirm()
-                                Toast.makeText(context, "🎉 상대방과 실시간 연결이 완료되었습니다!", Toast.LENGTH_LONG).show()
-                            }
-                            syncEngine.sync()
-                        }
+                    if (meta.ownerUid == coupleClient.currentUid() && !both && !meta.closed) {
+                        pendingRequests = coupleClient.pendingJoinRequests(coupleCode)
+                    } else {
+                        pendingRequests = emptyMap()
                     }
+                    if (both && !dataStoreManager.isPartnerConnectedFlow.first()) syncEngine.sync()
                 }
-            } catch (_: Exception) {
-            }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: com.ourlist.app.data.sync.SyncHttpException) {
+                if (e.status == 401 || e.status == 403) {
+                    try { confirmationCode = coupleClient.ownJoinRequest(coupleCode)?.confirmationCode.orEmpty() } catch (_: java.io.IOException) { }
+                }
+            } catch (_: Exception) { }
             delay(2500)
         }
     }
@@ -217,12 +219,60 @@ fun CoupleConnectScreen(
                 Spacer(Modifier.width(12.dp))
                 HomeHeader(
                     title = "커플 실시간 연동",
-                    subtitle = "6자리 코드로 1초 연결",
+                    subtitle = "코드와 확인번호로 안전하게 연결",
                     accentColor = Primary,
                 )
             }
         }
 
+        if (coupleCode.isNotBlank() && coupleProtocol < 2) {
+            item {
+                OurListCard(containerColor = Surface) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("보안 연결로 전환", color = TextPrimary, style = MaterialTheme.typography.titleMedium)
+                        Text("기존 공동·하트 목록은 이 휴대폰에 보관됩니다. 두 휴대폰을 모두 업데이트한 뒤 한 명이 새 코드를 만들고 상대방의 연결 요청을 승인해주세요.", color = TextSecondary)
+                        Button(onClick = { coroutineScope.launch {
+                            dataStoreManager.setPartnerConnected(false)
+                            dataStoreManager.setCoupleCode("")
+                            dataStoreManager.setCoupleProtocol(2)
+                        } }) { Text("목록을 유지하고 새 연결 시작") }
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+        if (coupleCode.isNotBlank() && !isPartnerConnected) {
+            if (confirmationCode.isNotBlank()) item {
+                OurListCard(containerColor = Surface) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("상대방의 연결 승인 대기", color = TextPrimary)
+                        Text("확인번호: $confirmationCode", style = MaterialTheme.typography.headlineSmall, color = Primary)
+                        Text("상대방 휴대폰의 요청 화면에도 같은 번호가 표시되는지 확인한 뒤 승인해주세요. 승인 전에는 목록이 공유되지 않습니다.", color = TextSecondary)
+                    }
+                }
+            }
+            pendingRequests.forEach { (uid, request) -> item(key = uid) {
+                OurListCard(containerColor = Surface) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("${request.userName}님의 연결 요청", color = TextPrimary)
+                        Text("확인번호: ${request.confirmationCode}", style = MaterialTheme.typography.titleLarge, color = Primary)
+                        Text("상대방 휴대폰의 확인번호와 일치할 때 승인해주세요.", color = TextSecondary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(enabled = !isOperating, onClick = { coroutineScope.launch {
+                                isOperating = true
+                                try { coupleClient.approveJoin(coupleCode, uid); pendingRequests = emptyMap() }
+                                catch (e: Exception) { Toast.makeText(context, "승인 실패: ${e.message}", Toast.LENGTH_LONG).show() }
+                                finally { isOperating = false }
+                            } }) { Text("번호 확인 후 승인") }
+                            OutlinedButton(enabled = !isOperating, onClick = { coroutineScope.launch {
+                                try { coupleClient.rejectJoin(coupleCode, uid); pendingRequests = pendingRequests - uid }
+                                catch (e: Exception) { Toast.makeText(context, "거절 실패: ${e.message}", Toast.LENGTH_LONG).show() }
+                            } }) { Text("거절") }
+                        }
+                    }
+                }
+            } }
+        }
         if (coupleCode.isNotBlank()) {
             if (!isPartnerConnected) {
                 // ==========================================
@@ -274,7 +324,7 @@ fun CoupleConnectScreen(
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "상대방 스마트폰의 [코드 입력하기] 탭에\n위 6자리 숫자를 입력하면 자동으로 연결됩니다.",
+                                    text = if (confirmationCode.isNotBlank()) "코드를 만든 상대방에게 위 확인번호를 보여주고 승인을 기다려주세요." else "상대방 스마트폰의 [코드 입력하기] 탭에\n위 6자리 숫자를 입력한 뒤 확인번호를 대조하고 연결을 승인합니다.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = TextSecondary,
                                     textAlign = TextAlign.Center,
@@ -309,7 +359,7 @@ fun CoupleConnectScreen(
                                         haptics.tick()
                                         val sendIntent = Intent().apply {
                                             action = Intent.ACTION_SEND
-                                            putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱의 [커플 실시간 연동]에서 이 코드를 입력하면 즉시 연결됩니다!")
+                                            putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱의 [커플 실시간 연동]에서 이 코드를 입력한 뒤 확인번호를 확인하고 연결을 승인해주세요.")
                                             type = "text/plain"
                                         }
                                         context.startActivity(Intent.createChooser(sendIntent, "커플 코드 공유"))
@@ -418,7 +468,7 @@ fun CoupleConnectScreen(
                                         haptics.tick()
                                         val sendIntent = Intent().apply {
                                             action = Intent.ACTION_SEND
-                                            putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱에서 이 코드를 입력하면 즉시 연결됩니다!")
+                                            putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $coupleCode\n앱에서 이 코드를 입력한 뒤 확인번호를 확인하고 연결을 승인해주세요.")
                                             type = "text/plain"
                                         }
                                         context.startActivity(Intent.createChooser(sendIntent, "커플 코드 공유"))
@@ -649,14 +699,14 @@ fun CoupleConnectScreen(
                             Icon(imageVector = Icons.Filled.Favorite, contentDescription = null, tint = Primary, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = "복잡한 구글 콘솔 없이, 6자리 코드로 1초 연결!",
+                                text = "복잡한 구글 콘솔 없이, 코드와 확인번호로 안전하게 연결!",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Primary,
                             )
                         }
                         Text(
-                            text = "한 분이 [새 코드 만들기]로 6자리 코드를 발급받고, 상대방이 [코드 입력하기]에서 그 숫자를 입력하면 바로 실시간 연동됩니다.",
+                            text = "한 분이 [새 코드 만들기]로 6자리 코드를 발급받고, 상대방이 [코드 입력하기]에서 숫자를 입력하고 두 휴대폰의 확인번호를 대조해 승인하면 연동됩니다.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
                             lineHeight = 18.sp,
@@ -734,21 +784,26 @@ fun CoupleConnectScreen(
                                         isOperating = true
                                         coroutineScope.launch {
                                             try {
-                                                val randomCode = (Random.nextInt(100000, 999999)).toString()
+                                                var randomCode = ""
                                                 val myDeviceId = dataStoreManager.getOrCreateDeviceId()
                                                 val myName = userName.ifBlank { "나" }
 
                                                 val sharedItems = bucketRepository.getAllInCollectionDirect(BucketCollection.SHARED)
                                                 val heartItems = bucketRepository.getAllInCollectionDirect(BucketCollection.HEART)
 
-                                                coupleClient.createRoom(
-                                                    roomCode = randomCode,
-                                                    myDeviceId = myDeviceId,
-                                                    myName = myName,
-                                                    sharedItems = sharedItems,
-                                                    heartItems = heartItems
-                                                )
+                                                var created = false
+                                                repeat(10) {
+                                                    if (!created) {
+                                                        randomCode = (100000 + java.security.SecureRandom().nextInt(900000)).toString()
+                                                        try {
+                                                            coupleClient.createRoom(randomCode, myDeviceId, myName, sharedItems, heartItems)
+                                                            created = true
+                                                        } catch (_: com.ourlist.app.data.sync.RoomCodeInUseException) { }
+                                                    }
+                                                }
+                                                check(created) { "코드를 발급하지 못했습니다. 잠시 후 다시 시도해주세요." }
 
+                                                dataStoreManager.setCoupleProtocol(2)
                                                 dataStoreManager.setCoupleCode(randomCode)
                                                 dataStoreManager.setPartnerConnected(false)
                                                 dataStoreManager.setLastSyncTime(System.currentTimeMillis())
@@ -833,7 +888,7 @@ fun CoupleConnectScreen(
                                             haptics.tick()
                                             val sendIntent = Intent().apply {
                                                 action = Intent.ACTION_SEND
-                                                putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $generatedCodeDisplay\n앱의 [커플 실시간 연동]에서 이 코드를 입력하면 즉시 연결됩니다!")
+                                                putExtra(Intent.EXTRA_TEXT, "💖 OurList 커플 연결 코드: $generatedCodeDisplay\n앱의 [커플 실시간 연동]에서 이 코드를 입력한 뒤 확인번호를 확인하고 연결을 승인해주세요.")
                                                 type = "text/plain"
                                             }
                                             context.startActivity(Intent.createChooser(sendIntent, "커플 코드 전달하기"))
@@ -863,7 +918,7 @@ fun CoupleConnectScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "상대방에게 전달받은 6자리 숫자를 입력하세요.\n연결 시 상대방의 버킷리스트가 내 폰으로 즉시 동기화됩니다.",
+                                text = "상대방에게 전달받은 6자리 숫자를 입력하세요.\n상대방이 확인번호를 대조하고 승인하면 공동·하트 목록이 동기화됩니다.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary,
                                 textAlign = TextAlign.Center,
@@ -930,23 +985,24 @@ fun CoupleConnectScreen(
                                             )
 
                                             // Merge initial room state into Room DB
-                                            for (item in roomData.shared) {
-                                                bucketRepository.upsertItemDirect(item)
-                                            }
-                                            for (item in roomData.heart) {
-                                                bucketRepository.upsertItemDirect(item)
-                                            }
+                                            bucketRepository.importSharedSnapshot(roomData)
 
+                                            dataStoreManager.setCoupleProtocol(2)
                                             dataStoreManager.setCoupleCode(clean)
-                                            dataStoreManager.setPartnerConnected(true)
+                                            dataStoreManager.setPartnerConnected(false)
                                             dataStoreManager.setLastSyncTime(System.currentTimeMillis())
 
                                             // Trigger initial full sync
-                                            syncEngine.sync()
-
+                                            val result = syncEngine.sync()
                                             withContext(Dispatchers.Main) {
-                                                Toast.makeText(context, "💖 연결 성공! 버킷리스트가 동기화되었습니다.", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, if (result is SyncState.Success) "연결 및 동기화가 완료되었습니다." else "연결되었습니다. 동기화 오류를 확인하고 다시 시도해주세요.", Toast.LENGTH_LONG).show()
                                             }
+                                        } catch (e: com.ourlist.app.data.sync.ApprovalRequiredException) {
+                                            dataStoreManager.setCoupleProtocol(2)
+                                            dataStoreManager.setCoupleCode(clean)
+                                            dataStoreManager.setPartnerConnected(false)
+                                            confirmationCode = coupleClient.ownJoinRequest(clean)?.confirmationCode.orEmpty()
+                                            Toast.makeText(context, "연결 요청을 보냈습니다. 상대방에게 확인번호를 보여주세요.", Toast.LENGTH_LONG).show()
                                         } catch (e: Exception) {
                                             withContext(Dispatchers.Main) {
                                                 Toast.makeText(context, "연결 실패: ${e.message}", Toast.LENGTH_LONG).show()
@@ -977,65 +1033,7 @@ fun CoupleConnectScreen(
             }
         }
 
-        // 6. Advanced / Firebase Realtime Database URL Configuration (Collapsible)
-        item {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = if (showAdvancedUrl) "▼ 고급: 클라우드 보관소(Firebase) 주소 접기" else "▶ 고급: 클라우드 보관소(Firebase) 주소 설정",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = TextTertiary,
-                    modifier = Modifier
-                        .clickable { showAdvancedUrl = !showAdvancedUrl }
-                        .padding(vertical = 4.dp),
-                )
 
-                AnimatedVisibility(visible = showAdvancedUrl) {
-                    Spacer(Modifier.height(8.dp))
-                    OurListCard(containerColor = Surface) {
-                        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(
-                                text = "기본 제공되는 OurList 전용 Firebase Realtime Database가 연결되어 있습니다. 필요 시 다른 데이터베이스 주소로 변경할 수 있습니다.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
-                            )
-
-                            OutlinedTextField(
-                                value = inputFirebaseUrl,
-                                onValueChange = { inputFirebaseUrl = it },
-                                placeholder = { Text("https://ourlist-4462e-default-rtdb.firebaseio.com", color = TextTertiary) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(10.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = SurfaceRaised,
-                                    unfocusedContainerColor = SurfaceRaised,
-                                    focusedBorderColor = Primary,
-                                    unfocusedBorderColor = Divider,
-                                    focusedTextColor = TextPrimary,
-                                    unfocusedTextColor = TextPrimary,
-                                ),
-                            )
-
-                            Button(
-                                onClick = {
-                                    haptics.confirm()
-                                    coroutineScope.launch {
-                                        dataStoreManager.setFirebaseRtdbUrl(inputFirebaseUrl.trim())
-                                        Toast.makeText(context, "데이터베이스 주소가 저장되었습니다.", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceRaised, contentColor = Primary),
-                                border = BorderStroke(1.dp, Primary.copy(alpha = 0.35f))
-                            ) {
-                                Text("주소 변경 저장", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 
     // Disconnect Confirmation Dialog
@@ -1064,11 +1062,16 @@ fun CoupleConnectScreen(
                     onClick = {
                         haptics.confirm()
                         coroutineScope.launch {
-                            dataStoreManager.setCoupleCode("")
-                            dataStoreManager.setPartnerConnected(false)
-                            generatedCodeDisplay = ""
-                            showDisconnectDialog = false
-                            Toast.makeText(context, if (isPartnerConnected) "커플 연동이 해제되었습니다." else "대기가 취소되었습니다.", Toast.LENGTH_SHORT).show()
+                            try {
+                                coupleClient.closeRoom(coupleCode, dataStoreManager.getOrCreateDeviceId())
+                                dataStoreManager.setCoupleCode("")
+                                dataStoreManager.setPartnerConnected(false)
+                                generatedCodeDisplay = ""
+                                showDisconnectDialog = false
+                                Toast.makeText(context, "서버 연결을 해제했습니다. 로컬 목록은 보관됩니다.", Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "해제 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Ink)
@@ -1097,7 +1100,8 @@ fun CoupleConnectScreen(
                 coroutineScope.launch {
                     dataStoreManager.setDatingStartDate(selectedDate)
                     if (coupleCode.isNotBlank()) {
-                        coupleClient.updateDatingStartDate(coupleCode, selectedDate)
+                        try { coupleClient.updateDatingStartDate(coupleCode, selectedDate) }
+                        catch (e: java.io.IOException) { Toast.makeText(context, "날짜는 이 휴대폰에 저장됐습니다. 서버 반영 실패: ${e.message}", Toast.LENGTH_LONG).show() }
                     }
                     if (selectedDate.isNotBlank()) {
                         val days = DDayCalculator.calculateDays(selectedDate)

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.CreatorAndDatePickerTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-06T05:11:12" hostname="MAIN" time="0.051">
+  <properties/>
+  <testcase name="when item is in PERSONAL or SECRET collection, display creator is always '나'" classname="com.ourlist.app.CreatorAndDatePickerTest" time="0.038"/>
+  <testcase name="when item createdBy is myDeviceId, display creator is '나'" classname="com.ourlist.app.CreatorAndDatePickerTest" time="0.0"/>
+  <testcase name="when partner created item with explicit nickname, displays that nickname if partnerName is not overridden" classname="com.ourlist.app.CreatorAndDatePickerTest" time="0.009"/>
+  <testcase name="when partner created item and partnerName is set, displays partnerName and never '나'" classname="com.ourlist.app.CreatorAndDatePickerTest" time="0.0"/>
+  <testcase name="when item createdBy is myUserSub, display creator is '나'" classname="com.ourlist.app.CreatorAndDatePickerTest" time="0.001"/>
+  <testcase name="date format YYYY-MM-DD parses correctly for date picker and D-Day" classname="com.ourlist.app.CreatorAndDatePickerTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

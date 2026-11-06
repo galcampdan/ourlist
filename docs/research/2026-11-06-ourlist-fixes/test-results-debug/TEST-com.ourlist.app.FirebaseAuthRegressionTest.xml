@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.FirebaseAuthRegressionTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-06T05:11:12" hostname="MAIN" time="0.387">
+  <properties/>
+  <testcase name="initialLoginPersistsRefreshCredential" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.302"/>
+  <testcase name="authorizationRetryUsesRefreshedTokenOnce" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.019"/>
+  <testcase name="expiredSessionRefreshesSameUid" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.005"/>
+  <testcase name="storedSessionDoesNotCreateNewIdentity" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.003"/>
+  <testcase name="permission401StillSubmitsRequestWithoutReadingSharedData" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.046"/>
+  <testcase name="failedRefreshDoesNotSilentlyReplaceMemberAccount" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.006"/>
+  <testcase name="refreshUidMismatchIsRejected" classname="com.ourlist.app.FirebaseAuthRegressionTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

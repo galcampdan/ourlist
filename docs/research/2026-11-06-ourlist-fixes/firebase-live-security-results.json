@@ -1,0 +1,203 @@
+{
+  "environment": "live Firebase, isolated new room and three temporary anonymous accounts",
+  "results": [
+    {
+      "test": "unauthenticated root denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "legacy root denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "public update readable",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "public update client write denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "owner creates protected room",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "owner reads room",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "unauthenticated room denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "stranger reads room denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "stranger overwrites room denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "unapproved partner state denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "partner requests approval",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "requester reads own confirmation",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "stranger reads requests denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "requester still cannot read state",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "requester cannot self approve",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "owner cannot assign without request",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "owner approves matching request",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "approved partner reads state",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "third device request denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "partner cannot replace membership",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "owner appends operation",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "same operation retry allowed",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "rewriting operation denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "partner cannot impersonate owner",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "partner appends own operation",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "personal scope op denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "partner state own device allowed",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "state actor impersonation denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "private snapshot injection denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "owner closes room",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "test": "closed room state denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "closed room write denied",
+      "passed": true,
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "test": "closed meta readable for disconnect",
+      "passed": true,
+      "status": 200,
+      "expected": 200
+    }
+  ]
+}

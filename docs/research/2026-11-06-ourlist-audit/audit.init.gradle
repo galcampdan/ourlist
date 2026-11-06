@@ -1,0 +1,17 @@
+def initFile = gradle.startParameter.initScripts.find { it.name == 'audit.init.gradle' }
+def auditDirectory = initFile.parentFile
+def jsonDirectory = new File(gradle.gradleUserHomeDir, 'caches/modules-2/files-2.1/org.json/json/20240303')
+def jsonJar = fileTree(jsonDirectory).matching { include '**/*.jar' }.files.find { it.name == 'json-20240303.jar' }
+if (jsonJar == null) { throw new GradleException('Audit probes require the already-cached org.json:json:20240303 jar; no download is performed.') }
+allprojects { p ->
+    p.afterEvaluate {
+        if (p.plugins.hasPlugin('com.android.application')) {
+            p.android.sourceSets.test.java.srcDir(new File(auditDirectory, 'probes'))
+            p.dependencies.add('testImplementation', p.files(jsonJar))
+            p.tasks.withType(Test).configureEach {
+                classpath = p.files(jsonJar) + classpath
+                testLogging { showStandardStreams = true }
+            }
+        }
+    }
+}

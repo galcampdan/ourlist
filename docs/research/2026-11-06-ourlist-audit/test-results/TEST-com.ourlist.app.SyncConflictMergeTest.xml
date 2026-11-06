@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.SyncConflictMergeTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-06T03:24:51" hostname="MAIN" time="0.001">
+  <properties/>
+  <testcase name="testOperationIdempotency" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <testcase name="testConflictDetection_sameFieldDifferentValues" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <testcase name="testDeleteVsUpdateConflict_detection" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <testcase name="testRoomMeta_isBothConnected_states" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <testcase name="testAutoMerge_differentFields" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <testcase name="testClockSkewImmunity_usingCausalPendingOperations" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <testcase name="testChecklist3WayUnionMerge" classname="com.ourlist.app.SyncConflictMergeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

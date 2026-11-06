@@ -35,7 +35,9 @@ data class SyncOperationEntity(
     val deviceSequence: Long,
     val moveId: String?,
     val schemaVersion: Int,
-    val isUploaded: Boolean = false
+    val isUploaded: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "NULL") val baseSnapshotJson: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val resolvesConflict: Boolean = false
 ) {
     fun toDomain(): SyncOperation = SyncOperation(
         opId = opId,
@@ -51,7 +53,9 @@ data class SyncOperationEntity(
         createdAt = createdAt,
         deviceSequence = deviceSequence,
         moveId = moveId,
-        schemaVersion = schemaVersion
+        schemaVersion = schemaVersion,
+        baseSnapshotJson = baseSnapshotJson,
+        resolvesConflict = resolvesConflict
     )
 
     companion object {
@@ -71,7 +75,9 @@ data class SyncOperationEntity(
                 deviceSequence = op.deviceSequence,
                 moveId = op.moveId,
                 schemaVersion = op.schemaVersion,
-                isUploaded = isUploaded
+                isUploaded = isUploaded,
+                baseSnapshotJson = op.baseSnapshotJson,
+                resolvesConflict = op.resolvesConflict
             )
     }
 }

@@ -4,6 +4,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -148,7 +151,7 @@ fun FilterSortBar(
             // View Mode Toggle Button
             Box(
                 modifier = Modifier
-                    .size(46.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(SurfaceRaised)
                     .clickable(
@@ -175,6 +178,7 @@ fun FilterSortBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = OurListDimens.ScreenPadding, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -183,7 +187,7 @@ fun FilterSortBar(
             Box {
                 Row(
                     modifier = Modifier
-                        .height(36.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(SurfaceSunken)
                         .clickable(
@@ -271,7 +275,7 @@ fun FilterSortBar(
 
             // 3 Wish Type Filter Chips: "꼭 하고 싶다", "언젠간", "특정 날짜" (Equally weighted, fits in 1 screen without scrolling)
             Row(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 val wishTypesWithLabels = listOf(
@@ -290,7 +294,7 @@ fun FilterSortBar(
                             haptics.tick()
                             onWishTypeToggle(type)
                         },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier,
                     )
                 }
             }
@@ -319,16 +323,15 @@ private fun FilterPillChip(
 
     Box(
         modifier = modifier
-            .height(36.dp)
+            .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
+            .toggleable(
+                value = selected,
                 role = Role.Checkbox,
-                onClick = onClick
+                onValueChange = { onClick() }
             )
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 6.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

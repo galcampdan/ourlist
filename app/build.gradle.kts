@@ -17,8 +17,13 @@ android {
         applicationId = "com.ourlist.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
+        val firebaseClient = Properties().apply {
+            val config = rootProject.file("firebase-client.properties")
+            if (config.isFile) config.inputStream().use { load(it) }
+        }
+        buildConfigField("String", "FIREBASE_API_KEY", "\"${firebaseClient.getProperty("apiKey", "")}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -143,6 +148,7 @@ dependencies {
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     testImplementation("androidx.room:room-testing:$roomVersion")
 

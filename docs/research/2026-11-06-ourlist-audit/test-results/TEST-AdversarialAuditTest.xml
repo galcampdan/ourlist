@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="AdversarialAuditTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-06T03:24:51" hostname="MAIN" time="0.422">
+  <properties/>
+  <testcase name="forbiddenOperationsReadLooksLikeEmptyRemoteHistory" classname="AdversarialAuditTest" time="0.252"/>
+  <testcase name="driveHistorySilentlyDropsNextPage" classname="AdversarialAuditTest" time="0.015"/>
+  <testcase name="thirdDeviceCanReplaceOccupiedPartnerInClient" classname="AdversarialAuditTest" time="0.031"/>
+  <testcase name="manualBackupCannotBeRecoveredUsingSeparateRecoveryCode" classname="AdversarialAuditTest" time="0.091"/>
+  <testcase name="driveMissingTokenUploadReturnsNullWithoutFailure" classname="AdversarialAuditTest" time="0.01"/>
+  <testcase name="createRoomDoesNotCheckExistingRoomBeforeUnconditionalPut" classname="AdversarialAuditTest" time="0.023"/>
+  <system-out><![CDATA[CONFIRMED: remote operations HTTP 403 is returned as an empty list
+CONFIRMED: Drive nextPageToken is ignored; only first response is returned
+CONFIRMED: occupied partner-B replaced by third-device-C; no Authorization header (mock server)
+CONFIRMED: actual CryptoEngine rejects recovery code for password-encrypted manual backup
+CONFIRMED: missing-token upload returns null; callers must not mark uploaded
+CONFIRMED: room creation unconditionally PUTs both meta and state, without collision guard
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

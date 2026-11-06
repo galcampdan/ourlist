@@ -74,7 +74,10 @@ class OurListApp : Application() {
         reminderScheduler = ReminderScheduler(this)
         ReminderScheduler.createNotificationChannel(this)
 
-        driveClient = DriveSyncClient {
+        driveClient = DriveSyncClient(tokenInvalidator = { token ->
+            com.google.android.gms.auth.GoogleAuthUtil.clearToken(this@OurListApp, token)
+            dataStoreManager.setGoogleAuthToken("")
+        }) {
             val savedToken = dataStoreManager.googleAuthTokenFlow.first().ifBlank { null }
             if (savedToken != null) {
                 savedToken
@@ -85,7 +88,7 @@ class OurListApp : Application() {
                         val freshToken = com.google.android.gms.auth.GoogleAuthUtil.getToken(
                             this@OurListApp,
                             account.account!!,
-                            "oauth2:https://www.googleapis.com/auth/drive.file"
+                            DriveSyncClient.OAUTH_SCOPE
                         )
                         dataStoreManager.setGoogleAuthToken(freshToken)
                         freshToken
@@ -98,9 +101,8 @@ class OurListApp : Application() {
             }
         }
 
-        coupleClient = CoupleSyncClient {
-            dataStoreManager.firebaseRtdbUrlFlow.first()
-        }
+        val firebaseSession = com.ourlist.app.data.sync.FirebaseSession(BuildConfig.FIREBASE_API_KEY, com.ourlist.app.data.sync.AndroidFirebaseSessionStore(this))
+        coupleClient = CoupleSyncClient(sessionProvider = { force -> firebaseSession.identity(force) })
 
         notificationRepository = NotificationRepository(database)
         conflictRepository = ConflictRepository(database, dataStoreManager)
@@ -114,6 +116,7 @@ class OurListApp : Application() {
             notificationRepository = notificationRepository,
             reminderScheduler = reminderScheduler,
             driveClient = driveClient,
+            bucketRepository = bucketRepository,
             coupleClient = coupleClient,
             safBackupManager = safBackupManager
         )

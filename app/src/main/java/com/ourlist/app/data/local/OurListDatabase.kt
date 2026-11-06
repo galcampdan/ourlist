@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.ourlist.app.data.local.dao.BucketDao
 import com.ourlist.app.data.local.dao.ConflictDao
 import com.ourlist.app.data.local.dao.InAppNotificationDao
@@ -20,7 +22,7 @@ import com.ourlist.app.data.local.entity.SyncOperationEntity
         ConflictEntity::class,
         InAppNotificationEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class OurListDatabase : RoomDatabase() {
@@ -40,7 +42,12 @@ abstract class OurListDatabase : RoomDatabase() {
                     context.applicationContext,
                     OurListDatabase::class.java,
                     "our_list.db"
-                ).fallbackToDestructiveMigration()
+                ).addMigrations(object : Migration(1, 2) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE sync_operations ADD COLUMN baseSnapshotJson TEXT DEFAULT NULL")
+                        db.execSQL("ALTER TABLE sync_operations ADD COLUMN resolvesConflict INTEGER NOT NULL DEFAULT 0")
+                    }
+                })
                  .build()
                  .also { INSTANCE = it }
             }

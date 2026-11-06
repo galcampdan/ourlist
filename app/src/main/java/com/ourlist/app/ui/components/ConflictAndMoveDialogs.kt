@@ -1,5 +1,7 @@
 package com.ourlist.app.ui.components
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -65,7 +67,7 @@ fun ConflictResolutionDialog(
             )
         },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     text = "'${conflict.itemTitle}' 항목에서 동시 수정이 감지되었습니다. 유지할 내용을 선택해주세요.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -81,6 +83,8 @@ fun ConflictResolutionDialog(
                         "memo" -> "메모"
                         "estimatedCostKRW" -> "예상 비용"
                         "wishType" -> "희망 유형"
+                        "checklist" -> "준비물 체크리스트"
+                        "completedAt" -> "완료 날짜"
                         else -> conflict.fieldPath ?: "정보"
                     }
 
@@ -101,7 +105,7 @@ fun ConflictResolutionDialog(
                             Text(text = "내 수정 내용:", style = MaterialTheme.typography.labelMedium, color = Primary, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = conflict.localValue ?: "(비어 있음)",
+                                text = displayConflictValue(conflict.fieldPath, conflict.localValue),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary,
@@ -133,7 +137,7 @@ fun ConflictResolutionDialog(
                             Text(text = "${partnerName}님의 수정 내용:", style = MaterialTheme.typography.labelMedium, color = Review, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = conflict.remoteValue ?: "(비어 있음)",
+                                text = displayConflictValue(conflict.fieldPath, conflict.remoteValue),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary,
@@ -292,4 +296,12 @@ fun MoveItemDialog(
             }
         }
     )
+}
+
+private fun displayConflictValue(path: String?, value: String?): String {
+    if (value == null) return "(비어 있음)"
+    return if (path == "checklist") runCatching {
+        kotlinx.serialization.json.Json.decodeFromString<List<com.ourlist.app.data.model.ChecklistItem>>(value)
+            .joinToString("\n") { "${if (it.checked) "✓" else "○"} ${it.text}" }.ifBlank { "(준비물 없음)" }
+    }.getOrDefault(value) else value
 }

@@ -50,6 +50,9 @@ interface BucketDao {
     @Update
     suspend fun update(item: BucketItemEntity)
 
+    @Query("DELETE FROM bucket_items WHERE collection IN (:collections)")
+    suspend fun deleteCollections(collections: List<String>)
+
     @Query("DELETE FROM bucket_items WHERE id = :id")
     suspend fun deletePermanently(id: String)
 

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.NetworkContractTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-06T05:11:12" hostname="MAIN" time="0.115">
+  <properties/>
+  <testcase name="serverReadFailureIsNotEmptyHistory" classname="com.ourlist.app.NetworkContractTest" time="0.009"/>
+  <testcase name="unauthorizedDriveRequestRefreshesTokenOnce" classname="com.ourlist.app.NetworkContractTest" time="0.014"/>
+  <testcase name="concurrentCodeClaimFailsConditionalWrite" classname="com.ourlist.app.NetworkContractTest" time="0.013"/>
+  <testcase name="malformedHistoryIsNotAcknowledgedAsEmpty" classname="com.ourlist.app.NetworkContractTest" time="0.026"/>
+  <testcase name="driveFollowsEveryPage" classname="com.ourlist.app.NetworkContractTest" time="0.01"/>
+  <testcase name="existingRoomCannotBeOverwritten" classname="com.ourlist.app.NetworkContractTest" time="0.009"/>
+  <testcase name="appDataListUsesCorrectSpace" classname="com.ourlist.app.NetworkContractTest" time="0.007"/>
+  <testcase name="operationUploadUsesSingleMultipartRequest" classname="com.ourlist.app.NetworkContractTest" time="0.012"/>
+  <testcase name="occupiedRoomRejectsThirdDeviceWithoutWriting" classname="com.ourlist.app.NetworkContractTest" time="0.008"/>
+  <testcase name="missingDriveTokenCannotLookLikeUploadedFile" classname="com.ourlist.app.NetworkContractTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.ourlist.app.CryptoEngineTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-06T05:11:15" hostname="MAIN" time="0.205">
+  <properties/>
+  <testcase name="testEncryptionAndDecryption_success" classname="com.ourlist.app.CryptoEngineTest" time="0.12"/>
+  <testcase name="testDecryption_wrongPassword_fails" classname="com.ourlist.app.CryptoEngineTest" time="0.045"/>
+  <testcase name="testEncryptionWithRecoveryCode" classname="com.ourlist.app.CryptoEngineTest" time="0.039"/>
+  <testcase name="testRecoveryCodeFormat" classname="com.ourlist.app.CryptoEngineTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -63,6 +63,11 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface as MaterialSurface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.toMutableStateList
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -118,12 +123,16 @@ fun ItemDetailScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val saveError by viewModel.saveError.collectAsState()
     val myDeviceId by viewModel.myDeviceId.collectAsState()
     val myUserSub by viewModel.myUserSub.collectAsState()
     val partnerName by viewModel.partnerName.collectAsState()
     val context = LocalContext.current
     val haptics = rememberHaptics()
 
+    LaunchedEffect(saveError) {
+        saveError?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+    }
     LaunchedEffect(uiState) {
         if (uiState is DetailUiState.Saved || uiState is DetailUiState.Deleted) {
             onNavigateBack()
@@ -175,6 +184,12 @@ fun ItemDetailScreen(
                 modifier = modifier
             )
         }
+        is DetailUiState.NotFound -> {
+            Column(Modifier.fillMaxSize().background(Ink).statusBarsPadding().padding(24.dp)) {
+                Text("이 항목을 찾을 수 없습니다. 삭제되었거나 다른 보관함으로 이동했을 수 있습니다.", color = TextPrimary)
+                TextButton(onClick = onNavigateBack) { Text("목록으로 돌아가기") }
+            }
+        }
         else -> Unit
     }
 }
@@ -200,19 +215,23 @@ private fun ItemDetailContent(
     val haptics = rememberHaptics()
     val coroutineScope = rememberCoroutineScope()
 
-    var title by remember { mutableStateOf(item.title) }
-    var wishType by remember { mutableStateOf(item.wishType) }
-    var targetDate by remember { mutableStateOf(item.targetDate ?: "") }
-    var costText by remember { mutableStateOf(item.estimatedCostKRW?.toString() ?: "") }
-    var placeText by remember { mutableStateOf(item.placeText ?: "") }
-    var memo by remember { mutableStateOf(item.memo ?: "") }
-    var isReminderOn by remember { mutableStateOf(initialReminderOn) }
+    var title by rememberSaveable(item.id) { mutableStateOf(item.title) }
+    var wishType by rememberSaveable(item.id) { mutableStateOf(item.wishType) }
+    var targetDate by rememberSaveable(item.id) { mutableStateOf(item.targetDate ?: "") }
+    var costText by rememberSaveable(item.id) { mutableStateOf(item.estimatedCostKRW?.toString() ?: "") }
+    var placeText by rememberSaveable(item.id) { mutableStateOf(item.placeText ?: "") }
+    var memo by rememberSaveable(item.id) { mutableStateOf(item.memo ?: "") }
+    var isReminderOn by rememberSaveable(item.id) { mutableStateOf(initialReminderOn) }
 
-    val checklistItems = remember { mutableStateListOf<ChecklistItem>().apply { addAll(item.checklist) } }
-    var newChecklistText by remember { mutableStateOf("") }
+    val checklistItems = rememberSaveable(item.id, saver = Saver<androidx.compose.runtime.snapshots.SnapshotStateList<ChecklistItem>, String>(
+        save = { Json.encodeToString(it.toList()) },
+        restore = { Json.decodeFromString<List<ChecklistItem>>(it).toMutableStateList() }
+    )) { item.checklist.toMutableStateList() }
+    var newChecklistText by rememberSaveable(item.id) { mutableStateOf("") }
     var showMoveDialog by remember { mutableStateOf(false) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
     var showCalendarDialog by remember { mutableStateOf(false) }
+    val costInvalid = costText.isNotBlank() && costText.toLongOrNull() == null
 
     // BringIntoView requesters for UI-04 keyboard collision handling
     val checklistBringIntoViewRequester = remember { BringIntoViewRequester() }
@@ -223,7 +242,7 @@ private fun ItemDetailContent(
         title, wishType, targetDate, costText, placeText, memo, isReminderOn, checklistItems.size, checklistItems.toList()
     ) {
         if (isNew) {
-            title.isNotBlank() || targetDate.isNotBlank() || costText.isNotBlank() ||
+            title.isNotBlank() || wishType != item.wishType || isReminderOn != initialReminderOn || targetDate.isNotBlank() || costText.isNotBlank() ||
                     placeText.isNotBlank() || memo.isNotBlank() || checklistItems.isNotEmpty()
         } else {
             title != item.title ||
@@ -266,6 +285,7 @@ private fun ItemDetailContent(
             confirmButton = {
                 Button(
                     onClick = {
+                        if (costInvalid) return@Button
                         val cost = costText.toLongOrNull()
                         val success = onSave(
                             title,
@@ -386,6 +406,7 @@ private fun ItemDetailContent(
 
                 Button(
                     onClick = {
+                        if (costInvalid) return@Button
                         val cost = costText.toLongOrNull()
                         onSave(
                             title,
@@ -707,6 +728,8 @@ private fun ItemDetailContent(
                                 )
 
                                 OutlinedTextField(
+                                    isError = costInvalid,
+                                    supportingText = { if (costInvalid) Text("입력 가능한 금액 범위를 초과했습니다.", color = Danger) },
                                     value = costText,
                                     onValueChange = { costText = it.filter { ch -> ch.isDigit() } },
                                     label = { Text("예상 비용", maxLines = 1, softWrap = false) },
@@ -765,6 +788,8 @@ private fun ItemDetailContent(
                                 )
 
                                 OutlinedTextField(
+                                    isError = costInvalid,
+                                    supportingText = { if (costInvalid) Text("입력 가능한 금액 범위를 초과했습니다.", color = Danger) },
                                     value = costText,
                                     onValueChange = { costText = it.filter { ch -> ch.isDigit() } },
                                     label = { Text("예상 비용", maxLines = 1, softWrap = false) },

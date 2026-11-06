@@ -34,6 +34,9 @@ interface SyncOperationDao {
     @Query("SELECT * FROM sync_operations WHERE isUploaded = 0 AND itemId = :itemId")
     suspend fun getPendingOpsForItem(itemId: String): List<SyncOperationEntity>
 
+    @Query("SELECT opId FROM sync_operations")
+    suspend fun getAllOperationIds(): List<String>
+
     @Query("SELECT EXISTS(SELECT 1 FROM sync_operations WHERE opId = :opId)")
     suspend fun exists(opId: String): Boolean
 

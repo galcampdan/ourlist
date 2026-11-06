@@ -176,6 +176,7 @@ class SyncConflictMergeTest {
         // 1. Only deviceA (creator created room, partner has not joined)
         val waitingMeta = com.ourlist.app.data.sync.RoomMeta(
             createdAt = 1000L,
+            ownerUid = "owner-A",
             deviceA = "device-uuid-1111",
             userAName = "나",
             deviceB = "",
@@ -188,7 +189,7 @@ class SyncConflictMergeTest {
         assertFalse("동일 기기(deviceA == deviceB)는 연결 완료로 인정되지 않아야 함", selfJoinedMeta.isBothConnected)
 
         // 3. Both devices properly connected
-        val connectedMeta = waitingMeta.copy(deviceB = "device-uuid-2222", userBName = "상대방")
+        val connectedMeta = waitingMeta.copy(deviceB = "device-uuid-2222", userBName = "상대방", partnerUid = "partner-B")
         assertTrue("서로 다른 두 기기가 모두 등록되면 연결 완료 상태여야 함", connectedMeta.isBothConnected)
     }
 }

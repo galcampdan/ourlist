@@ -18,10 +18,8 @@ import java.io.IOException
 data class SafFullBackup(
     val version: Int = 1,
     val exportedAt: Long = System.currentTimeMillis(),
-    val coupleCode: String = "",
     val shared: List<com.ourlist.app.data.model.BucketItem> = emptyList(),
-    val heart: List<com.ourlist.app.data.model.BucketItem> = emptyList(),
-    val personal: List<com.ourlist.app.data.model.BucketItem> = emptyList()
+    val heart: List<com.ourlist.app.data.model.BucketItem> = emptyList()
 )
 
 class SafBackupManager(
@@ -58,8 +56,6 @@ class SafBackupManager(
             val bucketDao = db.bucketDao()
             val sharedItems = bucketDao.getAllInCollection(BucketCollection.SHARED.name).map { it.toDomain() }
             val heartItems = bucketDao.getAllInCollection(BucketCollection.HEART.name).map { it.toDomain() }
-            val personalItems = bucketDao.getAllInCollection(BucketCollection.PERSONAL.name).map { it.toDomain() }
-            val coupleCode = dataStoreManager.coupleCodeFlow.first()
 
             // 1. Write bucketlist.json (Shared bucket list)
             val sharedJson = json.encodeToString(sharedItems)
@@ -72,20 +68,22 @@ class SafBackupManager(
             // 3. Write ourlist_backup_full.json (Comprehensive snapshot)
             val fullBackup = SafFullBackup(
                 exportedAt = System.currentTimeMillis(),
-                coupleCode = coupleCode,
                 shared = sharedItems,
-                heart = heartItems,
-                personal = personalItems
+                heart = heartItems
             )
             val fullJson = json.encodeToString(fullBackup)
             writeDocumentFile(rootDoc, "ourlist_backup_full.json", "application/json", fullJson)
 
             val now = System.currentTimeMillis()
             dataStoreManager.setLastSafBackupTime(now)
+            dataStoreManager.setLastSafBackupError("")
 
             val totalCount = sharedItems.size + heartItems.size
             Result.success(totalCount)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
+            dataStoreManager.setLastSafBackupError(e.message ?: "폴더 백업에 실패했습니다.")
             Result.failure(e)
         }
     }

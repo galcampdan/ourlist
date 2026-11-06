@@ -45,6 +45,9 @@ import com.ourlist.app.data.update.AppUpdateInfo
 import com.ourlist.app.data.update.AppUpdateManager
 import com.ourlist.app.ui.components.AppUpdateDialog
 import java.time.LocalDate
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,6 +70,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -118,6 +123,7 @@ fun MoreScreen(
     val haptics = rememberHaptics()
 
     val syncState by syncEngine.syncState.collectAsState()
+    val safBackupError by dataStoreManager.lastSafBackupErrorFlow.collectAsState(initial = "")
     val lastSyncTime by dataStoreManager.lastSyncTimeFlow.collectAsState(initial = 0L)
     val coupleCode by dataStoreManager.coupleCodeFlow.collectAsState(initial = "")
     val isPartnerConnected by dataStoreManager.isPartnerConnectedFlow.collectAsState(initial = false)
@@ -206,10 +212,9 @@ fun MoreScreen(
                 containerColor = Surface,
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         val isConnected = coupleCode.isNotEmpty() && isPartnerConnected
                         val isWaiting = coupleCode.isNotEmpty() && !isPartnerConnected
@@ -237,10 +242,10 @@ fun MoreScreen(
                                 val clean = coupleCode.filter { it.isDigit() }
                                 if (clean.length == 6) "🟡 상대방 연결 대기 중 (${clean.substring(0, 3)} - ${clean.substring(3, 6)})" else "🟡 상대방 연결 대기 중"
                             }
-                            else -> "6자리 코드로 1초 연결하기 >"
+                            else -> "코드와 확인번호로 연결하기 >"
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
                                     .size(40.dp)
@@ -282,6 +287,7 @@ fun MoreScreen(
                                 contentColor = Primary,
                             ),
                             border = BorderStroke(1.dp, Primary.copy(alpha = 0.35f)),
+                            modifier = Modifier.align(Alignment.End).widthIn(min = 88.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                         ) {
                             if (syncState is SyncState.Syncing) {
@@ -390,7 +396,7 @@ fun MoreScreen(
                             },
                             title = "커플 실시간 연동 (6자리 코드)",
                             subtitle = when {
-                                coupleCode.isEmpty() -> "6자리 코드로 1초 간편 연결"
+                                coupleCode.isEmpty() -> "코드 입력 후 상대방이 승인"
                                 !isPartnerConnected -> "대기 중: ${coupleCode.chunked(3).joinToString(" - ")} (상대방 미연결)"
                                 else -> "연결됨: ${coupleCode.chunked(3).joinToString(" - ")}"
                             },
@@ -430,7 +436,7 @@ fun MoreScreen(
                             icon = Icons.Filled.FolderShared,
                             iconTint = Income,
                             title = "Google Drive 폴더 자동 백업",
-                            subtitle = if (safFolderUri.isNotBlank()) "연결됨: ${safBackupManager.getFriendlyFolderName(safFolderUri)}" else "OurList 폴더 지정 시 자동 백업",
+                            subtitle = if (safBackupError.isNotBlank()) "백업 오류: $safBackupError" else if (safFolderUri.isNotBlank()) "공동·하트만 백업: ${safBackupManager.getFriendlyFolderName(safFolderUri)}" else "공동·하트 목록만 폴더에 자동 백업",
                             onClick = {
                                 haptics.tick()
                                 if (safFolderUri.isBlank()) {
@@ -784,6 +790,8 @@ fun ExportScopeDialog(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    var collections by remember { mutableStateOf(setOf(com.ourlist.app.data.model.BucketCollection.SHARED, com.ourlist.app.data.model.BucketCollection.HEART)) }
+    var includeTrash by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -798,19 +806,30 @@ fun ExportScopeDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "내보낼 파일 형식을 선택해주세요. 평문 파일로 내보내집니다.",
+                    text = "포함할 목록을 선택해주세요. 선택한 데이터는 암호화되지 않은 평문 파일로 내보냅니다.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
+                com.ourlist.app.data.model.BucketCollection.entries.forEach { collection ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = collection in collections, onCheckedChange = { checked -> collections = if (checked) collections + collection else collections - collection })
+                        Text(collection.displayName, color = TextPrimary)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = includeTrash, onCheckedChange = { includeTrash = it })
+                    Text("휴지통도 포함", color = TextPrimary)
+                }
                 Spacer(modifier = Modifier.height(4.dp))
 
                 OutlinedButton(
+                    enabled = collections.isNotEmpty(),
                     onClick = {
                         haptics.confirm()
                         coroutineScope.launch {
-                            val items = db.bucketDao().getAllItems().map { it.toDomain() }
+                            val items = ExportManager.selectItems(db.bucketDao().getAllItems().map { it.toDomain() }, collections, includeTrash)
                             val md = ExportManager.exportToMarkdown("전체 목록", items)
                             withContext(Dispatchers.Main) {
                                 onShare(md, "OurList_Export.md")
@@ -825,10 +844,11 @@ fun ExportScopeDialog(
                 }
 
                 OutlinedButton(
+                    enabled = collections.isNotEmpty(),
                     onClick = {
                         haptics.confirm()
                         coroutineScope.launch {
-                            val items = db.bucketDao().getAllItems().map { it.toDomain() }
+                            val items = ExportManager.selectItems(db.bucketDao().getAllItems().map { it.toDomain() }, collections, includeTrash)
                             val json = ExportManager.exportToJson(items)
                             withContext(Dispatchers.Main) {
                                 onShare(json, "OurList_Export.json")
@@ -843,10 +863,11 @@ fun ExportScopeDialog(
                 }
 
                 OutlinedButton(
+                    enabled = collections.isNotEmpty(),
                     onClick = {
                         haptics.confirm()
                         coroutineScope.launch {
-                            val items = db.bucketDao().getAllItems().map { it.toDomain() }
+                            val items = ExportManager.selectItems(db.bucketDao().getAllItems().map { it.toDomain() }, collections, includeTrash)
                             val csv = ExportManager.exportToCsv(items)
                             withContext(Dispatchers.Main) {
                                 onShare(csv, "OurList_Export.csv")

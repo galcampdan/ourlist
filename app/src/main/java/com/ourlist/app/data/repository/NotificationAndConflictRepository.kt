@@ -116,6 +116,8 @@ class ConflictRepository(
             "placeText" -> item.copy(placeText = chosenValue, updatedAt = now)
             "memo" -> item.copy(memo = chosenValue, updatedAt = now)
             "estimatedCostKRW" -> item.copy(estimatedCostKRW = chosenValue?.toLongOrNull(), updatedAt = now)
+            "checklist" -> item.copy(checklist = chosenValue?.let { json.decodeFromString<List<com.ourlist.app.data.model.ChecklistItem>>(it) } ?: emptyList(), updatedAt = now)
+            "completedAt" -> item.copy(completedAt = chosenValue?.toLongOrNull(), updatedAt = now)
             "wishType" -> item.copy(wishType = chosenValue?.let { WishType.valueOf(it) } ?: item.wishType, updatedAt = now)
             else -> item.copy(updatedAt = now)
         }
@@ -138,6 +140,7 @@ class ConflictRepository(
             kind = OpKind.UPDATE_FIELD,
             fieldPath = conflict.fieldPath,
             fieldValueJson = chosenValue,
+            resolvesConflict = true,
             itemSnapshotJson = json.encodeToString(updatedItem),
             createdAt = now,
             deviceSequence = seq

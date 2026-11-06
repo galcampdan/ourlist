@@ -15,6 +15,8 @@ import com.ourlist.app.data.model.ConflictType
 import com.ourlist.app.data.model.OpKind
 import com.ourlist.app.data.model.SyncOperation
 import com.ourlist.app.data.repository.NotificationRepository
+import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +42,7 @@ class SyncEngine(
     private val notificationRepository: NotificationRepository,
     private val reminderScheduler: ReminderScheduler,
     private val driveClient: DriveSyncClient,
+    private val bucketRepository: com.ourlist.app.data.repository.BucketRepository,
     private val coupleClient: CoupleSyncClient? = null,
     private val safBackupManager: SafBackupManager? = null
 ) {
@@ -57,9 +60,12 @@ class SyncEngine(
             _syncState.value = SyncState.Syncing
             try {
                 val coupleCode = dataStoreManager.coupleCodeFlow.first().trim()
+                if (coupleCode.isNotEmpty() && dataStoreManager.coupleProtocolFlow.first() < 2) {
+                    throw java.io.IOException("보안 연동을 위해 더보기에서 새 코드로 다시 연결해주세요. 기존 목록은 유지됩니다.")
+                }
                 if (coupleCode.isNotEmpty() && coupleClient != null) {
                     val result = syncViaCoupleCode(coupleCode)
-                    if (result is SyncState.Success) {
+                    if (result is SyncState.Success && result.syncedCount > 0) {
                         try { safBackupManager?.backupNow() } catch (e: Exception) { /* non-fatal */ }
                     }
                     _syncState.value = result
@@ -69,7 +75,7 @@ class SyncEngine(
                 val folderId = dataStoreManager.sharedFolderIdFlow.first().trim()
                 if (folderId.isNotEmpty()) {
                     val result = syncViaDrive(folderId)
-                    if (result is SyncState.Success) {
+                    if (result is SyncState.Success && result.syncedCount > 0) {
                         try { safBackupManager?.backupNow() } catch (e: Exception) { /* non-fatal */ }
                     }
                     _syncState.value = result
@@ -78,6 +84,8 @@ class SyncEngine(
 
                 _syncState.value = SyncState.Idle
                 SyncState.Idle
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 val error = SyncState.Error(e.message ?: "동기화 중 오류가 발생했습니다.")
                 _syncState.value = error
@@ -92,8 +100,13 @@ class SyncEngine(
         val mySub = dataStoreManager.userSubFlow.first()
 
         // Verify partner connection state via room metadata
-        val meta = client.fetchMeta(coupleCode)
-        if (meta != null && meta.isBothConnected) {
+        val meta = client.fetchMeta(coupleCode) ?: throw java.io.IOException("연결된 커플 방을 찾을 수 없습니다.")
+        require(meta.isMember(myDeviceId)) { "이 기기는 연결된 방의 구성원이 아닙니다." }
+        if (meta.isBothConnected) {
+            if (!dataStoreManager.isPartnerConnectedFlow.first()) {
+                val initial = client.fetchState(coupleCode) ?: throw java.io.IOException("공유 목록을 받지 못했습니다.")
+                bucketRepository.importSharedSnapshot(initial)
+            }
             dataStoreManager.setPartnerConnected(true)
         } else {
             dataStoreManager.setPartnerConnected(false)
@@ -112,17 +125,19 @@ class SyncEngine(
 
         // Step 1: Download & Apply Remote Operations
         val remoteOps = client.fetchOperations(coupleCode)
-        for (remoteOp in remoteOps) {
+        for (remoteOp in orderedOperations(remoteOps)) {
             if (syncDao.exists(remoteOp.opId)) continue
 
             // Skip own operations
-            if (remoteOp.deviceId == myDeviceId || (mySub.isNotEmpty() && remoteOp.actorSub == mySub)) {
+            if (remoteOp.deviceId == myDeviceId) {
                 syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
                 continue
             }
 
-            applyRemoteOperation(remoteOp)
-            syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
+            db.withTransaction {
+                applyRemoteOperation(remoteOp)
+                syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
+            }
             processedRemoteCount++
         }
 
@@ -131,9 +146,8 @@ class SyncEngine(
         for (entity in pending) {
             val op = entity.toDomain()
             val ok = client.pushOperation(coupleCode, op)
-            if (ok) {
-                syncDao.markUploaded(op.opId)
-            }
+            if (!ok) throw java.io.IOException("변경사항 전송에 실패했습니다. 다시 동기화해주세요.")
+            syncDao.markUploaded(op.opId)
         }
 
         // Step 3: Check cold start snapshot recovery
@@ -153,9 +167,14 @@ class SyncEngine(
         }
 
         // Step 4: Update Snapshots for partner cold start
-        val sharedItems = bucketDao.getAllInCollection(BucketCollection.SHARED.name).map { it.toDomain() }
-        val heartItems = bucketDao.getAllInCollection(BucketCollection.HEART.name).map { it.toDomain() }
-        client.pushState(coupleCode, myDeviceId, sharedItems, heartItems)
+        val snapshot = db.withTransaction {
+            RoomStateData(
+                shared = bucketDao.getAllInCollection(BucketCollection.SHARED.name).map { it.toDomain() },
+                heart = bucketDao.getAllInCollection(BucketCollection.HEART.name).map { it.toDomain() },
+                appliedOperationIds = syncDao.getAllOperationIds()
+            )
+        }
+        if (!client.pushState(coupleCode, myDeviceId, snapshot.shared, snapshot.heart, snapshot.appliedOperationIds)) throw java.io.IOException("공유 상태 저장에 실패했습니다.")
 
         // Step 5: Housekeeping - Purge trash older than 30 days
         bucketDao.purgeTrashOlderThan(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000L)
@@ -190,6 +209,7 @@ class SyncEngine(
             heartOpsFolderId = opFolders.firstOrNull { it.name == "heart" }?.id
                 ?: driveClient.createFolder("heart", opsFolderId)
         }
+        check(opsFolderId != null && sharedOpsFolderId != null && heartOpsFolderId != null) { "동기화 폴더를 준비하지 못했습니다." }
 
         var processedRemoteCount = 0
 
@@ -242,32 +262,39 @@ class SyncEngine(
         val files = driveClient.listFilesInFolder(folderId)
         var appliedCount = 0
 
+        val operations = mutableListOf<SyncOperation>()
         for (file in files) {
             if (!file.name.endsWith(".json")) continue
             val opId = file.name.removeSuffix(".json")
             if (syncDao.exists(opId)) continue
 
-            val content = driveClient.downloadFileContent(file.id) ?: continue
+            val content = driveClient.downloadFileContent(file.id)
             val remoteOp = try {
                 json.decodeFromString<SyncOperation>(content)
             } catch (e: Exception) {
-                continue
+                throw java.io.IOException("동기화 파일을 읽을 수 없습니다: ${file.name}", e)
             }
-
+            require(remoteOp.opId == opId) { "동기화 파일 ID가 올바르지 않습니다." }
+            operations.add(remoteOp)
+        }
+        for (remoteOp in orderedOperations(operations)) {
             // Skip own operations
-            if (remoteOp.deviceId == myDeviceId || (mySub.isNotEmpty() && remoteOp.actorSub == mySub)) {
+            if (remoteOp.deviceId == myDeviceId) {
                 syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
                 continue
             }
 
-            applyRemoteOperation(remoteOp)
-            syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
+            db.withTransaction {
+                applyRemoteOperation(remoteOp)
+                syncDao.insert(SyncOperationEntity.fromDomain(remoteOp, isUploaded = true))
+            }
             appliedCount++
         }
         return appliedCount
     }
 
     private suspend fun applyRemoteOperation(op: SyncOperation) {
+        require(op.collection in setOf(BucketCollection.SHARED, BucketCollection.HEART)) { "공유할 수 없는 목록의 변경사항입니다." }
         val localEntity = bucketDao.getItemById(op.itemId)
         val localItem = localEntity?.toDomain()
 
@@ -285,22 +312,11 @@ class SyncEngine(
 
         when (op.kind) {
             OpKind.CREATE -> {
-                if (localItem == null) {
-                    val snapshot = op.itemSnapshotJson?.let {
-                        try { json.decodeFromString<BucketItem>(it) } catch (e: Exception) { null }
-                    }
-                    if (snapshot != null) {
-                        bucketDao.upsert(BucketItemEntity.fromDomain(snapshot))
-                        notificationRepository.recordPartnerAction(
-                            actorName = op.actorName,
-                            actionType = "CREATE",
-                            itemId = snapshot.id,
-                            itemTitle = snapshot.title,
-                            collection = snapshot.collection
-                        )
-                        val isReminderOn = dataStoreManager.isReminderEnabled(snapshot.id)
-                        reminderScheduler.scheduleRemindersForItem(snapshot, isReminderOn)
-                    }
+                val created = createOrMove(localItem, op)
+                if (created != null) {
+                    bucketDao.upsert(BucketItemEntity.fromDomain(created))
+                    notificationRepository.recordPartnerAction(op.actorName, "CREATE", created.id, created.title, created.collection)
+                    reminderScheduler.scheduleRemindersForItem(created, dataStoreManager.isReminderEnabled(created.id))
                 }
             }
 
@@ -312,104 +328,13 @@ class SyncEngine(
                         return
                     }
 
-                    val remoteSnapshot = op.itemSnapshotJson?.let {
-                        try { json.decodeFromString<BucketItem>(it) } catch (e: Exception) { null }
+                    val merged = FieldMerge.merge(localItem, op, locallyModifiedFields)
+                    for (difference in merged.conflicts) {
+                        createFieldConflict(localItem, difference.path, difference.local, difference.remote, op)
                     }
-
-                    if (remoteSnapshot != null) {
-                        var mergedTitle = localItem.title
-                        var mergedWishType = localItem.wishType
-                        var mergedTargetDate = localItem.targetDate
-                        var mergedCost = localItem.estimatedCostKRW
-                        var mergedPlace = localItem.placeText
-                        var mergedMemo = localItem.memo
-
-                        // Title check
-                        if (localItem.title != remoteSnapshot.title) {
-                            if (locallyModifiedFields.contains("title")) {
-                                createFieldConflict(localItem, "title", localItem.title, remoteSnapshot.title, op)
-                            } else {
-                                mergedTitle = remoteSnapshot.title
-                            }
-                        }
-
-                        // WishType check
-                        if (localItem.wishType != remoteSnapshot.wishType) {
-                            if (locallyModifiedFields.contains("wishType")) {
-                                createFieldConflict(localItem, "wishType", localItem.wishType.name, remoteSnapshot.wishType.name, op)
-                            } else {
-                                mergedWishType = remoteSnapshot.wishType
-                            }
-                        }
-
-                        // TargetDate check
-                        if (localItem.targetDate != remoteSnapshot.targetDate) {
-                            if (locallyModifiedFields.contains("targetDate")) {
-                                createFieldConflict(localItem, "targetDate", localItem.targetDate, remoteSnapshot.targetDate, op)
-                            } else {
-                                mergedTargetDate = remoteSnapshot.targetDate
-                            }
-                        }
-
-                        // EstimatedCost check
-                        if (localItem.estimatedCostKRW != remoteSnapshot.estimatedCostKRW) {
-                            if (locallyModifiedFields.contains("estimatedCostKRW")) {
-                                createFieldConflict(localItem, "estimatedCostKRW", localItem.estimatedCostKRW?.toString(), remoteSnapshot.estimatedCostKRW?.toString(), op)
-                            } else {
-                                mergedCost = remoteSnapshot.estimatedCostKRW
-                            }
-                        }
-
-                        // PlaceText check
-                        if (localItem.placeText != remoteSnapshot.placeText) {
-                            if (locallyModifiedFields.contains("placeText")) {
-                                createFieldConflict(localItem, "placeText", localItem.placeText, remoteSnapshot.placeText, op)
-                            } else {
-                                mergedPlace = remoteSnapshot.placeText
-                            }
-                        }
-
-                        // Memo check
-                        if (localItem.memo != remoteSnapshot.memo) {
-                            if (locallyModifiedFields.contains("memo")) {
-                                createFieldConflict(localItem, "memo", localItem.memo, remoteSnapshot.memo, op)
-                            } else {
-                                mergedMemo = remoteSnapshot.memo
-                            }
-                        }
-
-                        // Checklist 3-Way Union Merge
-                        val localMap = localItem.checklist.associateBy { it.id }.toMutableMap()
-                        for (remoteCheck in remoteSnapshot.checklist) {
-                            val existingLocal = localMap[remoteCheck.id]
-                            if (existingLocal == null) {
-                                localMap[remoteCheck.id] = remoteCheck
-                            } else {
-                                val hasPendingToggle = pendingOps.any {
-                                    it.kind == OpKind.CHECKLIST_TOGGLE.name && it.fieldPath == remoteCheck.id
-                                }
-                                if (!hasPendingToggle) {
-                                    localMap[remoteCheck.id] = remoteCheck
-                                }
-                            }
-                        }
-                        val mergedChecklist = localMap.values.toList()
-
-                        val mergedItem = localItem.copy(
-                            title = mergedTitle,
-                            wishType = mergedWishType,
-                            targetDate = mergedTargetDate,
-                            estimatedCostKRW = mergedCost,
-                            placeText = mergedPlace,
-                            memo = mergedMemo,
-                            checklist = mergedChecklist,
-                            completedAt = remoteSnapshot.completedAt ?: localItem.completedAt,
-                            updatedAt = System.currentTimeMillis()
-                        )
-                        bucketDao.upsert(BucketItemEntity.fromDomain(mergedItem))
-                        val isReminderOn = dataStoreManager.isReminderEnabled(mergedItem.id)
-                        reminderScheduler.scheduleRemindersForItem(mergedItem, isReminderOn)
-                    }
+                    bucketDao.upsert(BucketItemEntity.fromDomain(merged.item))
+                    val isReminderOn = dataStoreManager.isReminderEnabled(merged.item.id)
+                    reminderScheduler.scheduleRemindersForItem(merged.item, isReminderOn)
 
                     notificationRepository.recordPartnerAction(
                         actorName = op.actorName,
@@ -479,7 +404,10 @@ class SyncEngine(
 
             OpKind.DELETE -> {
                 if (localItem != null) {
-                    if (localPendingUpdate && localItem.deletedAt == null) {
+                    val moveTarget = op.fieldValueJson?.removePrefix("moved_to_")?.let { name -> BucketCollection.entries.firstOrNull { it.name == name } }
+                    if (op.moveId != null && moveTarget in setOf(BucketCollection.SHARED, BucketCollection.HEART)) {
+                        bucketDao.upsert(BucketItemEntity.fromDomain(localItem.copy(collection = moveTarget!!, deletedAt = null, updatedAt = op.createdAt)))
+                    } else if (localPendingUpdate && localItem.deletedAt == null && op.moveId == null) {
                         // Conflict: local updated, remote deleted
                         createDeleteVsUpdateConflict(localItem, "내 수정본 유지", "상대방의 삭제 수용", op)
                     } else {

@@ -12,3 +12,7 @@ local.properties
 *.jks
 keystore.properties
 *.apk
+
+# Local Firebase emulator logs
+*-debug.log
+.firebase/

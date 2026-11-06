@@ -142,7 +142,8 @@ fun DriveSetupScreen(
             .requestEmail()
             .requestScopes(
                 Scope("https://www.googleapis.com/auth/drive.file"),
-                Scope("https://www.googleapis.com/auth/drive")
+                Scope("https://www.googleapis.com/auth/drive"),
+                Scope("https://www.googleapis.com/auth/drive.appdata")
             )
             .build()
         GoogleSignIn.getClient(context, gso)
@@ -162,7 +163,7 @@ fun DriveSetupScreen(
                             val token = GoogleAuthUtil.getToken(
                                 context,
                                 account.account ?: return@launch,
-                                "oauth2:https://www.googleapis.com/auth/drive.file"
+                                DriveSyncClient.OAUTH_SCOPE
                             )
                             dataStoreManager.setGoogleAuthToken(token)
                             dataStoreManager.setUserInfo(

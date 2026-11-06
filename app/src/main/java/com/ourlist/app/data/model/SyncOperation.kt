@@ -30,5 +30,7 @@ data class SyncOperation(
     val createdAt: Long = System.currentTimeMillis(),
     val deviceSequence: Long = 0L,
     val moveId: String? = null,
-    val schemaVersion: Int = 1
+    val baseSnapshotJson: String? = null,
+    val resolvesConflict: Boolean = false,
+    val schemaVersion: Int = 2
 )

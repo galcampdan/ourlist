@@ -6,6 +6,9 @@ import com.ourlist.app.data.local.entity.BucketItemEntity
 import com.ourlist.app.data.model.BucketCollection
 import com.ourlist.app.data.model.BucketItem
 import com.ourlist.app.data.sync.DriveSyncClient
+import androidx.room.withTransaction
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -33,7 +36,12 @@ class BackupManager(
         val allPersonal = personalItems + secretItems
 
         val plainJson = json.encodeToString(allPersonal)
-        CryptoEngine.encrypt(plainJson, password)
+        var recoveryCode = dataStoreManager.recoveryCodeFlow.first()
+        if (recoveryCode.isBlank()) {
+            recoveryCode = CryptoEngine.generateRecoveryCode()
+            dataStoreManager.setRecoveryCode(recoveryCode)
+        }
+        CryptoEngine.encryptBackup(plainJson, password, recoveryCode)
     }
 
     suspend fun restoreEncryptedBackup(
@@ -42,16 +50,19 @@ class BackupManager(
         mode: RestoreMode
     ): Result<Int> = withContext(Dispatchers.IO) {
         try {
-            val decryptedJson = CryptoEngine.decrypt(encryptedBase64, passOrRecoveryCode)
+            val decryptedJson = CryptoEngine.decryptBackup(encryptedBase64, passOrRecoveryCode)
             val items = json.decodeFromString<List<BucketItem>>(decryptedJson)
 
+            require(items.all { it.collection in setOf(BucketCollection.PERSONAL, BucketCollection.SECRET_LOCAL) }) { "개인 백업에 공유 데이터가 포함되어 있습니다." }
+            require(items.map { it.id }.distinct().size == items.size) { "백업의 항목 ID가 중복됩니다." }
+            db.withTransaction {
+            for (item in items) {
+                val existing = bucketDao.getItemById(item.id)
+                require(existing == null || existing.collection in setOf(BucketCollection.PERSONAL.name, BucketCollection.SECRET_LOCAL.name)) { "공유 항목과 백업 ID가 충돌합니다." }
+            }
             if (mode == RestoreMode.OVERWRITE) {
                 // Remove existing personal and secret local items
-                val curPersonal = bucketDao.getAllInCollection(BucketCollection.PERSONAL.name)
-                val curSecret = bucketDao.getAllInCollection(BucketCollection.SECRET_LOCAL.name)
-                for (item in curPersonal + curSecret) {
-                    bucketDao.deletePermanently(item.id)
-                }
+                bucketDao.deleteCollections(listOf(BucketCollection.PERSONAL.name, BucketCollection.SECRET_LOCAL.name))
                 bucketDao.upsertAll(items.map { BucketItemEntity.fromDomain(it) })
             } else {
                 // Merge mode
@@ -62,10 +73,21 @@ class BackupManager(
                     }
                 }
             }
+            }
             Result.success(items.size)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun listAutoBackups(): List<com.ourlist.app.data.sync.DriveFileMetadata> =
+        driveClient.listFilesInFolder("appDataFolder").filter { it.name.startsWith("ourlist_backup_") && it.name.endsWith(".enc") }.sortedByDescending { it.name }
+
+    suspend fun readAutoBackup(id: String): String {
+        require(listAutoBackups().any { it.id == id }) { "선택한 자동 백업을 찾을 수 없습니다." }
+        return driveClient.downloadFileContent(id)
     }
 
     suspend fun performAutoDriveBackup(password: String): Boolean = withContext(Dispatchers.IO) {
@@ -82,19 +104,24 @@ class BackupManager(
             val backupFiles = appDataFiles.filter { it.name.startsWith("ourlist_backup_") && it.name.endsWith(".enc") }
                 .sortedByDescending { it.name }
 
-            if (backupFiles.size > 7) {
-                // Old backups beyond 7 are ignored / cleaned
-            }
+            for (old in backupFiles.drop(7)) driveClient.deleteFile(old.id)
 
             dataStoreManager.setLastBackupTime(System.currentTimeMillis())
+            dataStoreManager.setLastBackupError("")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            dataStoreManager.setLastBackupError(e.message ?: "자동 백업에 실패했습니다.")
             false
         }
     }
 }
 
 object ExportManager {
+    fun selectItems(items: List<BucketItem>, collections: Set<BucketCollection>, includeTrash: Boolean = false): List<BucketItem> =
+        items.filter { it.collection in collections && (includeTrash || !it.isDeleted) }
+
 
     fun exportToJson(items: List<BucketItem>): String {
         val json = Json { prettyPrint = true }
@@ -162,7 +189,8 @@ object ExportManager {
     }
 
     private fun escapeCsv(text: String): String {
-        val escaped = text.replace("\"", "\"\"")
+        val safe = if (text.trimStart().firstOrNull() in listOf('=', '+', '-', '@')) "'" + text else text
+        val escaped = safe.replace("\"", "\"\"")
         return if (escaped.contains(",") || escaped.contains("\n") || escaped.contains("\"")) {
             "\"$escaped\""
         } else {

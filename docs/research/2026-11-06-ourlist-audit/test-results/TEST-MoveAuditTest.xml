@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="MoveAuditTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-06T03:24:51" hostname="MAIN" time="0.025">
+  <properties/>
+  <testcase name="destinationCreateAfterMoveIsIgnoredWhenSameIdExistsInTrash" classname="MoveAuditTest" time="0.025"/>
+  <system-out><![CDATA[CONFIRMED: actual SyncEngine ignores HEART CREATE for same-ID trashed SHARED item; moved item stays hidden
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

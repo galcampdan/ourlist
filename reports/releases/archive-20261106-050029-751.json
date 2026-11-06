@@ -1,0 +1,26 @@
+[
+  {
+    "app": "OurList",
+    "variant": "debug",
+    "versionName": "1.0.8",
+    "versionCode": "9",
+    "buildTimeKst": "20261106-140006",
+    "source": "C:\\Users\\atlan\\Documents\\Projects\\OurList\\app\\build\\outputs\\apk\\debug\\app-debug.apk",
+    "driveCopy": "G:\\내 드라이브\\03_앱개발\\ourlist\\OurList-debug-v1.0.8-9-20261106-140006.apk",
+    "bytes": 21606424,
+    "sha256": "4FCF17054EF36A76A16A330DFFD6982130CC1E96D9F123AE4829FE1E3D0F4E81",
+    "cloudSync": "not_verified"
+  },
+  {
+    "app": "OurList",
+    "variant": "release",
+    "versionName": "1.0.8",
+    "versionCode": "9",
+    "buildTimeKst": "20261106-140015",
+    "source": "C:\\Users\\atlan\\Documents\\Projects\\OurList\\app\\build\\outputs\\apk\\release\\app-release.apk",
+    "driveCopy": "G:\\내 드라이브\\03_앱개발\\ourlist\\OurList-release-v1.0.8-9-20261106-140015.apk",
+    "bytes": 14361024,
+    "sha256": "DA7BF094995F42ABDE4ED9F413E84C9A4011E06C90929B025C68A33F72510B5D",
+    "cloudSync": "not_verified"
+  }
+]

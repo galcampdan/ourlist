@@ -1,5 +1,7 @@
 package com.ourlist.app.data.backup
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.Cipher
@@ -16,6 +18,28 @@ object CryptoEngine {
     private const val TAG_LENGTH_BIT = 128
     private const val SALT_LENGTH_BYTE = 16
     private const val IV_LENGTH_BYTE = 12
+
+    fun encryptBackup(plainText: String, password: String, recoveryCode: String): String {
+        require(password.isNotBlank() && recoveryCode.isNotBlank())
+        val dataKey = Base64.getEncoder().encodeToString(ByteArray(32).apply { SecureRandom().nextBytes(this) })
+        return Json.encodeToString(mapOf(
+            "format" to "ourlist-backup-2",
+            "payload" to encrypt(plainText, dataKey),
+            "passwordKey" to encrypt(dataKey, password),
+            "recoveryKey" to encrypt(dataKey, recoveryCode)
+        ))
+    }
+
+    fun decryptBackup(backup: String, passwordOrCode: String): String {
+        val text = backup.trim()
+        if (!text.startsWith("{")) return decrypt(text, passwordOrCode)
+        val envelope = Json.decodeFromString<Map<String, String>>(text)
+        require(envelope["format"] == "ourlist-backup-2") { "지원하지 않는 백업 형식입니다." }
+        val key = listOf("passwordKey", "recoveryKey").firstNotNullOfOrNull { name ->
+            envelope[name]?.let { runCatching { decrypt(it, passwordOrCode) }.getOrNull() }
+        } ?: throw javax.crypto.AEADBadTagException("비밀번호 또는 백업 당시의 복구 코드를 확인해주세요.")
+        return decrypt(requireNotNull(envelope["payload"]), key)
+    }
 
     fun generateRecoveryCode(): String {
         val chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ" // exclude confusing 0, 1, I, O

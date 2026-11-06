@@ -38,9 +38,12 @@ class DataStoreManager(private val context: Context) {
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
         val LAST_SYNC_TIME = longPreferencesKey("last_sync_time")
         val LAST_BACKUP_TIME = longPreferencesKey("last_backup_time")
+        val LAST_BACKUP_ERROR = stringPreferencesKey("last_backup_error")
+        val LAST_SAF_BACKUP_ERROR = stringPreferencesKey("last_saf_backup_error")
         val BACKUP_RECOVERY_CODE = stringPreferencesKey("backup_recovery_code")
         val GOOGLE_AUTH_TOKEN = stringPreferencesKey("google_auth_token")
         val COUPLE_CODE = stringPreferencesKey("couple_code")
+        val COUPLE_PROTOCOL = longPreferencesKey("couple_protocol")
         val FIREBASE_RTDB_URL = stringPreferencesKey("firebase_rtdb_url")
         val SAF_BACKUP_TREE_URI = stringPreferencesKey("saf_backup_tree_uri")
         val SAF_BACKUP_ENABLED = booleanPreferencesKey("saf_backup_enabled")
@@ -82,6 +85,8 @@ class DataStoreManager(private val context: Context) {
     val partnerNameFlow: Flow<String> = context.dataStore.data.map { it[Keys.PARTNER_NAME] ?: "상대방" }
 
     val sharedFolderIdFlow: Flow<String> = context.dataStore.data.map { it[Keys.SHARED_FOLDER_ID] ?: "" }
+    val coupleProtocolFlow: Flow<Int> = context.dataStore.data.map { prefs -> prefs[Keys.COUPLE_PROTOCOL]?.toInt() ?: if (prefs[Keys.COUPLE_CODE].isNullOrBlank()) 2 else 1 }
+    suspend fun setCoupleProtocol(version: Int) { context.dataStore.edit { it[Keys.COUPLE_PROTOCOL] = version.toLong() } }
     val coupleCodeFlow: Flow<String> = context.dataStore.data.map { it[Keys.COUPLE_CODE] ?: "" }
     val firebaseRtdbUrlFlow: Flow<String> = context.dataStore.data.map {
         it[Keys.FIREBASE_RTDB_URL] ?: "https://ourlist-4462e-default-rtdb.firebaseio.com"
@@ -117,6 +122,11 @@ class DataStoreManager(private val context: Context) {
     }
 
     val lastSyncTimeFlow: Flow<Long> = context.dataStore.data.map { it[Keys.LAST_SYNC_TIME] ?: 0L }
+    val lastBackupErrorFlow: Flow<String> = context.dataStore.data.map { it[Keys.LAST_BACKUP_ERROR] ?: "" }
+    val lastSafBackupErrorFlow: Flow<String> = context.dataStore.data.map { it[Keys.LAST_SAF_BACKUP_ERROR] ?: "" }
+    suspend fun setLastBackupError(message: String) { context.dataStore.edit { it[Keys.LAST_BACKUP_ERROR] = message } }
+    suspend fun setLastSafBackupError(message: String) { context.dataStore.edit { it[Keys.LAST_SAF_BACKUP_ERROR] = message } }
+
     val lastBackupTimeFlow: Flow<Long> = context.dataStore.data.map { it[Keys.LAST_BACKUP_TIME] ?: 0L }
     val recoveryCodeFlow: Flow<String> = context.dataStore.data.map { it[Keys.BACKUP_RECOVERY_CODE] ?: "" }
 
@@ -153,7 +163,10 @@ class DataStoreManager(private val context: Context) {
     }
 
     suspend fun setCoupleCode(code: String) {
-        context.dataStore.edit { it[Keys.COUPLE_CODE] = code }
+        context.dataStore.edit {
+            if (it[Keys.COUPLE_CODE] != code) it[Keys.IS_PARTNER_CONNECTED] = false
+            it[Keys.COUPLE_CODE] = code
+        }
     }
 
     suspend fun setFirebaseRtdbUrl(url: String) {
