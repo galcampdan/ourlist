@@ -8,4 +8,6 @@ Next: with explicit authorization, upload the exact public APK to VirusTotal and
 
 After external resolution, verify old-app download/install again, validate preserved fixture data, then promote prerelease and conditionally republish matching Firebase notice. No extra publication confirmation needed beyond the existing task authorization once the blocker is resolved. Any rebuilt APK must immediately be archived by scripts/build_and_archive.ps1 to G:\내 드라이브\03_앱개발\ourlist, with original signing preserved.
 
-Cleanup: room 944157 and requester account removed. Owner anonymous UID was lost after fixture deletion/uninstall; broader account enumeration was rejected. Do not infer which remaining project account is the owner or delete another user. No need to repeat broad audit, JVM tests or builds without a new change.
+Cleanup is complete: room 944157, requests and both temporary accounts deleted/readback verified after separate identification-query authorization. Do not repeat account enumeration.
+
+Latest user clarification: app is personal use for two people; user felt the task had grown too much. Keep work focused on the two-phone APK and essential data protection. No VirusTotal upload or Google review submission is authorized or required by default. User says E: unlocked; no further browser testing performed. Approved app-version rollback/verification hold remains in force; do not infer that the personal-use clarification revoked it.

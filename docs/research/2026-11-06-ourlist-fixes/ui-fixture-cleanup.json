@@ -1,7 +1,9 @@
 {
   "userAuthorized": true,
+  "identificationQuerySeparatelyAuthorized": true,
   "onlyRoom": "944157",
   "roomAndRequestsDeleted": true,
-  "temporaryAccountsDeletedAndVerified": 1,
-  "remainingAccount": "Owner UID unavailable after disposable release app uninstall; no broader user enumeration performed."
+  "temporaryAccountsDeletedAndVerified": 2,
+  "ownerMatched": "Only remaining anonymous account created two seconds before the recorded owner room-creation screenshot.",
+  "existingUserAccountsNotDeleted": true
 }
