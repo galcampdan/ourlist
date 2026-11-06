@@ -1,6 +1,6 @@
 # OurList 1.0.8 (versionCode 9) APK 보관 검증
 
-**배포 검증 보류:** Play Protect generic_malware 분류로 앱 내 설치가 차단됐다. 사용자 승인으로 공지를 1.0.7로 복원했고 GitHub 1.0.8은 사전 출시다. 이 문서는 로컬 APK 보관 검증이며 정상 설치 보증이 아니다.
+**최신 상태:** 사용자 명시 요청으로 1.0.8 앱 내 업데이트 공지와 일반 GitHub Release를 다시 공개했다. Play Protect 설치 차단은 최근 시험에서 유지됐으며, 경고 해제나 정상 설치 완료는 확인되지 않았다. 이 문서는 APK 보관 검증이며 정상 설치 보증이 아니다.
 
 - Release: https://github.com/galcampdan/ourlist/releases/tag/v1.0.8
 - 소스 태그: v1.0.8 (9e76407), 기존 Release 서명 유지.

@@ -50,3 +50,10 @@ Play Protect 분류 원인/해제, 실제 Google 계정 OAuth 및 Drive 자동 �
 ## 최종 접수 상태 — 2026-11-06
 
 사용자가 최종 APK와 동일한 SHA-256의 VirusTotal 결과(0/67, Google Undetected)를 제공했다. 이후 Google 양식의 최종 성공 문구 `Your email has been sent`를 제공하여 재검토 요청 접수를 확인했다. 이 기록의 증거 출처는 사용자 제공 결과이며 자동 브라우저 재검증은 하지 않았다. 중복 접수하지 않는다. 양식은 회신을 보내지 않는다고 안내한다. 검토 완료 시점과 Play Protect 경고 해제 여부는 UNKNOWN이며, 기존 업데이트 공지 보류는 유지한다.
+
+
+## 최신 배포 상태 — 사용자 요청으로 1.0.8 재공개
+
+사용자가 Play Protect 경고가 남더라도 1.0.8을 먼저 제공하도록 명시적으로 요청했다. 이전 보류 지침을 이 요청이 대체한다. 같은 공개 APK의 크기(14,361,024 bytes)와 SHA-256(25F30BD60C3129FAFF2940D6B92AA53E5A277051644EEB0FF03DCAE72E50D74A)을 다시 검증하고 GitHub v1.0.8을 일반 최신 Release로 전환했다. Firebase 공지도 ETag 조건부 쓰기로 1.0.8(9), forceUpdate=false로 복원했으며 공개 readback이 일치했다. 공지와 릴리스 노트에는 설치 경고가 남아 있고 재검토 요청이 접수됐음을 표시했다.
+
+실제 설치 경고 해제/설치 완료는 여전히 미확인이다. 재공개 과정에서 앱 코드·APK·서명 설정·데이터 접근 규칙은 변경하지 않았고 새 APK도 빌드하지 않았다. 증거: app-version-before-republish.json, app-version-republished.json.
