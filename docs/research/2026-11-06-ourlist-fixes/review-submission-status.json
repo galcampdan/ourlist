@@ -1,0 +1,22 @@
+{
+  "dateKst": "2026-11-06",
+  "package": "com.ourlist.app",
+  "versionName": "1.0.8",
+  "versionCode": 9,
+  "apkSha256": "25F30BD60C3129FAFF2940D6B92AA53E5A277051644EEB0FF03DCAE72E50D74A",
+  "virusTotal": {
+    "source": "user supplied report text",
+    "detected": 0,
+    "displayedDenominator": 67,
+    "googleEngine": "Undetected",
+    "reportUrl": "https://www.virustotal.com/gui/file/25f30bd60c3129faff2940d6b92aa53e5a277051644eeb0ff03dcae72e50d74a"
+  },
+  "googleAppeal": {
+    "source": "user supplied final confirmation",
+    "submitted": true,
+    "confirmation": "Your email has been sent",
+    "replyPromised": false
+  },
+  "playProtectWarningRemoved": "UNKNOWN",
+  "releaseHoldMaintained": true
+}

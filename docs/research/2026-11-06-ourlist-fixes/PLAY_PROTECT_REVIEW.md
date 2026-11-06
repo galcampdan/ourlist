@@ -41,3 +41,8 @@ play-protect-verdict.log, evidence/update-play-protect-result.*, evidence/update
 - Google 영문 양식에 패키지/정확한 SHA-256/929자 설명을 작성했다. 최종 Submit은 누르지 않았다.
 - 사용자가 기존 Drive APK를 선택했다. VirusTotal의 3MB/복수 파일 archive 경고에는 업로드는 가능하다고 명시되어 있다. 원본 APK 그대로 Confirm upload를 눌렀으나 빈 reCAPTCHA 창과 연결 오류로 멈췄다. 업로드나 검사 완료는 확인되지 않았다.
 - 다음 작업은 보안문자 연결을 정상적으로 해결하고 동일 해시의 VT 결과 페이지를 확인한 후 Google 양식을 제출하는 것이다. 공식 크기 설명: https://docs.virustotal.com/docs/compressed-files .
+
+
+## 최종 접수 상태 — 2026-11-06
+
+사용자가 최종 APK와 동일한 SHA-256의 VirusTotal 결과(0/67, Google Undetected)를 제공했다. 이후 Google 양식의 최종 성공 문구 `Your email has been sent`를 제공하여 재검토 요청 접수를 확인했다. 이 기록의 증거 출처는 사용자 제공 결과이며 자동 브라우저 재검증은 하지 않았다. 중복 접수하지 않는다. 양식은 회신을 보내지 않는다고 안내한다. 검토 완료 시점과 Play Protect 경고 해제 여부는 UNKNOWN이며, 기존 업데이트 공지 보류는 유지한다.
